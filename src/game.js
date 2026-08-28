@@ -32,7 +32,7 @@ addEventListener('blur', () => keys.clear());
 
 const held = (...names) => names.some((n) => keys.has(n.toLowerCase()));
 
-// ── Просторне та симетричне поле ──────────────────────────────────────
+// ── Поле ──────────────────────────────────────────────────────────────
 const LEVEL = [];
 for (let r = 0; r < ROWS; r++) {
   const row = [];
@@ -277,7 +277,7 @@ function update(dt) {
 
 // ── Малювання ─────────────────────────────────────────────────────────
 function render(ctx) {
-  // 1. Рендер ігрового світу та елементів
+  // КРОК 1. Малюємо картографію та стіни рівня
   ctx.fillStyle = T.colors.background;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
 
@@ -293,14 +293,91 @@ function render(ctx) {
     }
   }
 
-  // Монетки
+  // КРОК 2. Шар темряви з прорізанням світла від ліхтариків (малюється ПОВЕРХ стін, але ПІД персонажами)
+  ctx.save();
+  
+  function drawFlashlightCone(px, py, dirIndex, lightRadius = 220, coneAngle = Math.PI / 3) {
+    const angles = [
+      0,                  // 0: [→]
+      Math.PI / 4,        // 1: [↘]
+      Math.PI / 2,        // 2: [↓]
+      (3 * Math.PI) / 4,  // 3: [↙]
+      Math.PI,            // 4: [←]
+      -(3 * Math.PI) / 4, // 5: [↖]
+      -Math.PI / 2,       // 6: [↑]
+      -Math.PI / 4,       // 7: [↗]
+      Math.PI / 2         // 8: [•]
+    ];
+
+    const angle = angles[dirIndex !== undefined ? dirIndex : 8];
+
+    // Кругова аура навколо персонажа
+    const aura = ctx.createRadialGradient(px, py, 5, px, py, 50);
+    aura.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(px, py, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Яскравий конус світла
+    const coneGrad = ctx.createRadialGradient(px, py, 10, px, py, lightRadius);
+    coneGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    coneGrad.addColorStop(0.6, 'rgba(255, 255, 200, 0.6)');
+    coneGrad.addColorStop(1, 'rgba(255, 255, 180, 0)');
+
+    ctx.fillStyle = coneGrad;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.arc(px, py, lightRadius, angle - coneAngle / 2, angle + coneAngle / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Заливка екрана темрявою (88% прозорості дозволяє злегка бачити силуети стін)
+  ctx.fillStyle = 'rgba(5, 4, 12, 0.88)';
+  ctx.fillRect(0, 0, GAME.width, GAME.height);
+
+  // Режим вирізання світла
+  ctx.globalCompositeOperation = 'destination-out';
+
+  // Ліхтарик гравця
+  const pCenterX = player.x + player.w / 2;
+  const pCenterY = player.y + player.h / 2;
+  drawFlashlightCone(pCenterX, pCenterY, player.dir, 240);
+
+  // Ліхтарик суперника/бота
+  if (enemy) {
+    const eW = enemy.w || T.player.size;
+    const eH = enemy.h || T.player.size;
+    const eCenterX = enemy.x + eW / 2;
+    const eCenterY = enemy.y + eH / 2;
+    drawFlashlightCone(eCenterX, eCenterY, enemy.dir, 220);
+  }
+
+  // Підсвічування вибухів
+  for (const exp of explosions) {
+    const expGrad = ctx.createRadialGradient(exp.x, exp.y, 5, exp.x, exp.y, exp.radius * 1.5);
+    expGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    expGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = expGrad;
+    ctx.beginPath();
+    ctx.arc(exp.x, exp.y, exp.radius * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore(); // Повертаємо звичайний режим
+
+  // КРОК 3. Малюємо всі ігрові об'єкти ПОВЕРХ темряви (тепер їх завжди чітко видно!)
+  
+  // 1. Монетки
   for (const p of pickups) {
     const bob = Math.sin(p.t * T.pickups.bobSpeed) * T.pickups.bobHeight;
     ctx.fillStyle = T.colors.pickup;
     ctx.fillRect(p.x, p.y + bob, p.w, p.h);
   }
 
-  // Бомби
+  // 2. Бомби
   for (const b of bombs) {
     const blink = Math.sin(b.timer * 20) > 0;
     ctx.fillStyle = blink ? '#ff4444' : '#111111';
@@ -311,7 +388,7 @@ function render(ctx) {
     ctx.fillRect(b.x - 1, b.y - 14, 2, 5);
   }
 
-  // Вибухи
+  // 3. Вибухи
   for (const exp of explosions) {
     ctx.fillStyle = 'rgba(255, 100, 0, 0.5)';
     ctx.beginPath();
@@ -325,7 +402,7 @@ function render(ctx) {
   const offsetX = (DISPLAY_SIZE - player.w) / 2;
   const offsetY = (DISPLAY_SIZE - player.h) / 2;
 
-  // Гравець
+  // 4. Гравець
   const drew = heroSheet.draw(
     ctx, 
     player.frame, 
@@ -341,7 +418,7 @@ function render(ctx) {
     ctx.fillRect(Math.round(player.x), Math.round(player.y), player.w, player.h);
   }
 
-  // Супротивник / Бот
+  // 5. Супротивник / Бот
   if (enemy) {
     const eW = enemy.w || T.player.size;
     const eH = enemy.h || T.player.size;
@@ -364,82 +441,7 @@ function render(ctx) {
     }
   }
 
-  // 2. Ефект темряви та ліхтариків (Lighting Mask)
-  ctx.save();
-  
-  function drawFlashlightCone(px, py, dirIndex, lightRadius = 180, coneAngle = Math.PI / 3.5) {
-    const angles = [
-      0,                  // 0: [→]
-      Math.PI / 4,        // 1: [↘]
-      Math.PI / 2,        // 2: [↓]
-      (3 * Math.PI) / 4,  // 3: [↙]
-      Math.PI,            // 4: [←]
-      -(3 * Math.PI) / 4, // 5: [↖]
-      -Math.PI / 2,       // 6: [↑]
-      -Math.PI / 4,       // 7: [↗]
-      Math.PI / 2         // 8: [•]
-    ];
-
-    const angle = angles[dirIndex !== undefined ? dirIndex : 8];
-
-    // Аура під ногами
-    const aura = ctx.createRadialGradient(px, py, 5, px, py, 40);
-    aura.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = aura;
-    ctx.beginPath();
-    ctx.arc(px, py, 40, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Конус променя
-    const coneGrad = ctx.createRadialGradient(px, py, 10, px, py, lightRadius);
-    coneGrad.addColorStop(0, 'rgba(255, 255, 200, 0.95)');
-    coneGrad.addColorStop(0.7, 'rgba(255, 255, 180, 0.4)');
-    coneGrad.addColorStop(1, 'rgba(255, 255, 180, 0)');
-
-    ctx.fillStyle = coneGrad;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.arc(px, py, lightRadius, angle - coneAngle / 2, angle + coneAngle / 2);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // Тінь на весь екран
-  ctx.fillStyle = 'rgba(5, 4, 12, 0.93)';
-  ctx.fillRect(0, 0, GAME.width, GAME.height);
-
-  // Прорізаємо світло
-  ctx.globalCompositeOperation = 'destination-out';
-
-  // Світло гравця
-  const pCenterX = player.x + player.w / 2;
-  const pCenterY = player.y + player.h / 2;
-  drawFlashlightCone(pCenterX, pCenterY, player.dir, 200);
-
-  // Світло бота / суперника
-  if (enemy) {
-    const eW = enemy.w || T.player.size;
-    const eH = enemy.h || T.player.size;
-    const eCenterX = enemy.x + eW / 2;
-    const eCenterY = enemy.y + eH / 2;
-    drawFlashlightCone(eCenterX, eCenterY, enemy.dir, 180);
-  }
-
-  // Підсвічування вибухів
-  for (const exp of explosions) {
-    const expGrad = ctx.createRadialGradient(exp.x, exp.y, 5, exp.x, exp.y, exp.radius * 1.5);
-    expGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    expGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = expGrad;
-    ctx.beginPath();
-    ctx.arc(exp.x, exp.y, exp.radius * 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.restore();
-
-  // 3. Інтерфейс підрахунку
+  // 6. Інтерфейс
   const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
   ctx.fillStyle = '#ffffff';
   ctx.font = '14px monospace';
