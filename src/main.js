@@ -24,7 +24,7 @@ export const enemy = {
   score: 0
 };
 
-// 2. Клас Бота з плавним обходом перешкод (без дрижання)
+// 2. Клас Бота (з інтелектуальним ковзанням по кутах)
 class Bot {
   constructor(x = 200, y = 200) {
     this.x = x;
@@ -33,8 +33,8 @@ class Bot {
     this.h = TUNING.player.size;
     this.speed = TUNING.enemy.botSpeed || 150;
     this.avoidDir = 1;
-    this.detourTimer = 0; // Таймер утримання напрямку обходу
-    this.dir = 8; // [•] Спокій
+    this.detourTimer = 0;
+    this.dir = 8;
     this.frame = 0;
     this.frameTimer = 0;
     this.usedBombs = 0;
@@ -43,7 +43,7 @@ class Bot {
   }
 
   hasLineOfSight(target, boxHitsWallFn) {
-    const steps = 10;
+    const steps = 12;
     for (let i = 1; i <= steps; i++) {
       const checkX = this.x + (target.x - this.x) * (i / steps);
       const checkY = this.y + (target.y - this.y) * (i / steps);
@@ -82,7 +82,7 @@ class Bot {
 
     if (!target) return;
 
-    // Авто-бомба бота при наближенні
+    // Бомби
     if (minDist < 40 && this.bombCooldown <= 0) {
       if (placeBomb(this.x, this.y, enemy.score, this.usedBombs)) {
         this.usedBombs++;
@@ -97,7 +97,6 @@ class Bot {
     let dy = target.y - this.y;
     const dist = Math.hypot(dx, dy);
 
-    // Збільшено радіус досягнення цілі до 6px, щоб не було мікро-тремору біля монетки
     if (dist > 6) {
       const stepX = (dx / dist) * this.speed * dt;
       const stepY = (dy / dist) * this.speed * dt;
@@ -105,31 +104,45 @@ class Bot {
       const canX = !boxHitsWallFn(this.x + stepX, this.y, this.w, this.h);
       const canY = !boxHitsWallFn(this.x, this.y + stepY, this.w, this.h);
 
+      // 1. Рух по X з ковзанням
       if (canX) {
         this.x += stepX;
       } else {
-        // Утримуємо напрямок обходу по Y
-        if (this.detourTimer <= 0) {
-          this.avoidDir = Math.random() < 0.5 ? 1 : -1;
-          this.detourTimer = 0.4;
-        }
-        const detourY = this.speed * dt * this.avoidDir;
-        if (!boxHitsWallFn(this.x, this.y + detourY, this.w, this.h)) {
-          this.y += detourY;
+        // Якщо вперлися по X, перевіряємо, чи можна закруглити кут по Y (Smart Corner Slide)
+        const slideUp = !boxHitsWallFn(this.x, this.y - this.speed * dt, this.w, this.h);
+        const slideDown = !boxHitsWallFn(this.x, this.y + this.speed * dt, this.w, this.h);
+
+        if (dy < 0 && slideUp) {
+          this.y -= this.speed * dt;
+        } else if (dy > 0 && slideDown) {
+          this.y += this.speed * dt;
+        } else if (slideUp || slideDown) {
+          if (this.detourTimer <= 0) {
+            this.avoidDir = slideUp ? -1 : 1;
+            this.detourTimer = 0.5;
+          }
+          this.y += this.speed * dt * this.avoidDir;
         }
       }
 
+      // 2. Рух по Y з ковзанням
       if (canY) {
         this.y += stepY;
       } else {
-        // Утримуємо напрямок обходу по X
-        if (this.detourTimer <= 0) {
-          this.avoidDir = Math.random() < 0.5 ? 1 : -1;
-          this.detourTimer = 0.4;
-        }
-        const detourX = this.speed * dt * this.avoidDir;
-        if (!boxHitsWallFn(this.x + detourX, this.y, this.w, this.h)) {
-          this.x += detourX;
+        // Якщо вперлися по Y, перевіряємо, чи можна закруглити кут по X
+        const slideLeft = !boxHitsWallFn(this.x - this.speed * dt, this.y, this.w, this.h);
+        const slideRight = !boxHitsWallFn(this.x + this.speed * dt, this.y, this.w, this.h);
+
+        if (dx < 0 && slideLeft) {
+          this.x -= this.speed * dt;
+        } else if (dx > 0 && slideRight) {
+          this.x += this.speed * dt;
+        } else if (slideLeft || slideRight) {
+          if (this.detourTimer <= 0) {
+            this.avoidDir = slideLeft ? -1 : 1;
+            this.detourTimer = 0.5;
+          }
+          this.x += this.speed * dt * this.avoidDir;
         }
       }
     }
@@ -138,17 +151,17 @@ class Bot {
     const movedY = this.y - oldY;
     const isMoving = Math.abs(movedX) > 0.05 || Math.abs(movedY) > 0.05;
 
-    // Обчислення 8-векторної анімації бота (9 рядків, 7 кадрів)
+    // Анімація напрямку
     if (isMoving) {
       const angle = Math.atan2(movedY, movedX);
-      if (angle >= -Math.PI / 8 && angle < Math.PI / 8) this.dir = 0;       // [→]
-      else if (angle >= Math.PI / 8 && angle < 3 * Math.PI / 8) this.dir = 1;  // [↘]
-      else if (angle >= 3 * Math.PI / 8 && angle < 5 * Math.PI / 8) this.dir = 2;// [↓]
-      else if (angle >= 5 * Math.PI / 8 && angle < 7 * Math.PI / 8) this.dir = 3;// [↙]
-      else if (angle >= 7 * Math.PI / 8 || angle < -7 * Math.PI / 8) this.dir = 4;// [←]
-      else if (angle >= -7 * Math.PI / 8 && angle < -5 * Math.PI / 8) this.dir = 5;// [↖]
-      else if (angle >= -5 * Math.PI / 8 && angle < -3 * Math.PI / 8) this.dir = 6;// [↑]
-      else if (angle >= -3 * Math.PI / 8 && angle < -Math.PI / 8) this.dir = 7;  // [↗]
+      if (angle >= -Math.PI / 8 && angle < Math.PI / 8) this.dir = 0;
+      else if (angle >= Math.PI / 8 && angle < 3 * Math.PI / 8) this.dir = 1;
+      else if (angle >= 3 * Math.PI / 8 && angle < 5 * Math.PI / 8) this.dir = 2;
+      else if (angle >= 5 * Math.PI / 8 && angle < 7 * Math.PI / 8) this.dir = 3;
+      else if (angle >= 7 * Math.PI / 8 || angle < -7 * Math.PI / 8) this.dir = 4;
+      else if (angle >= -7 * Math.PI / 8 && angle < -5 * Math.PI / 8) this.dir = 5;
+      else if (angle >= -5 * Math.PI / 8 && angle < -3 * Math.PI / 8) this.dir = 6;
+      else if (angle >= -3 * Math.PI / 8 && angle < -Math.PI / 8) this.dir = 7;
 
       this.frameTimer += dt;
       if (this.frameTimer > 1 / TUNING.player.animationSpeed) {
@@ -156,7 +169,7 @@ class Bot {
         this.frame = (this.frame + 1) % 7;
       }
     } else {
-      this.dir = 8; // [•] Спокій
+      this.dir = 8;
       this.frameTimer += dt;
       if (this.frameTimer > 1 / (TUNING.player.animationSpeed / 2)) {
         this.frameTimer = 0;
@@ -169,24 +182,6 @@ class Bot {
     enemy.dir = this.dir;
     enemy.frame = this.frame;
     enemy.moving = isMoving;
-  }
-}
-
-export function tickBot(pickupsList, boxHitsWallFn, playerObj, dt) {
-  if (isPlayingWithBot && botInstance) {
-    botInstance.update(pickupsList, boxHitsWallFn, playerObj, dt);
-  }
-}
-
-export function respawnBot() {
-  if (botInstance) {
-    botInstance.x = GAME.width - 80;
-    botInstance.y = GAME.height - 80;
-    enemy.x = botInstance.x;
-    enemy.y = botInstance.y;
-  } else {
-    enemy.x = GAME.width - 80;
-    enemy.y = GAME.height - 80;
   }
 }
 
