@@ -24,7 +24,7 @@ export const enemy = {
   score: 0
 };
 
-// 2. Клас Бота з підтримкою 70х70 спрайтів та 8 напрямків руху
+// 2. Клас Бота з плавним обходом перешкод (без дрижання)
 class Bot {
   constructor(x = 200, y = 200) {
     this.x = x;
@@ -33,6 +33,7 @@ class Bot {
     this.h = TUNING.player.size;
     this.speed = TUNING.enemy.botSpeed || 150;
     this.avoidDir = 1;
+    this.detourTimer = 0; // Таймер утримання напрямку обходу
     this.dir = 8; // [•] Спокій
     this.frame = 0;
     this.frameTimer = 0;
@@ -55,6 +56,7 @@ class Bot {
     if (!pickupsList || pickupsList.length === 0) return;
 
     if (this.bombCooldown > 0) this.bombCooldown -= dt;
+    if (this.detourTimer > 0) this.detourTimer -= dt;
 
     let target = null;
     let minDist = Infinity;
@@ -95,7 +97,8 @@ class Bot {
     let dy = target.y - this.y;
     const dist = Math.hypot(dx, dy);
 
-    if (dist > 2) {
+    // Збільшено радіус досягнення цілі до 6px, щоб не було мікро-тремору біля монетки
+    if (dist > 6) {
       const stepX = (dx / dist) * this.speed * dt;
       const stepY = (dy / dist) * this.speed * dt;
 
@@ -105,22 +108,28 @@ class Bot {
       if (canX) {
         this.x += stepX;
       } else {
+        // Утримуємо напрямок обходу по Y
+        if (this.detourTimer <= 0) {
+          this.avoidDir = Math.random() < 0.5 ? 1 : -1;
+          this.detourTimer = 0.4;
+        }
         const detourY = this.speed * dt * this.avoidDir;
         if (!boxHitsWallFn(this.x, this.y + detourY, this.w, this.h)) {
           this.y += detourY;
-        } else {
-          this.avoidDir *= -1;
         }
       }
 
       if (canY) {
         this.y += stepY;
       } else {
+        // Утримуємо напрямок обходу по X
+        if (this.detourTimer <= 0) {
+          this.avoidDir = Math.random() < 0.5 ? 1 : -1;
+          this.detourTimer = 0.4;
+        }
         const detourX = this.speed * dt * this.avoidDir;
         if (!boxHitsWallFn(this.x + detourX, this.y, this.w, this.h)) {
           this.x += detourX;
-        } else {
-          this.avoidDir *= -1;
         }
       }
     }
@@ -181,7 +190,7 @@ export function respawnBot() {
   }
 }
 
-// 3. Метчмейкінг без хибного фолбеку на бота
+// 3. Метчмейкінг
 async function findMatch() {
   const statusEl = document.getElementById('status');
   if (statusEl) statusEl.textContent = TUNING.texts.statusSearching;
