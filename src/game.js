@@ -5,13 +5,16 @@ import { enemy, sendMyMovement, tickBot, isPlayingWithBot, respawnBot } from './
 const T = TUNING;
 const TILE = T.field.tile; // 32px
 
-// ── Розміри поля та відцентрилювання ──────────────────────────────────
-const COLS = 29; // 29 * 32 = 928px
-const ROWS = 15; // 15 * 32 = 480px
-const OFFSET_X = Math.floor((GAME.width - COLS * TILE) / 2);  // (960 - 928) / 2 = 16px
-const OFFSET_Y = Math.floor((GAME.height - ROWS * TILE) / 2); // (540 - 480) / 2 = 30px
+// ── Візуальний розмір персонажа на екрані ─────────────────────────────
+const DISPLAY_SIZE = 42; // Зменшений компактний розмір (замість 70)
 
-// ── Інпут ─────────────────────────────────────────────────────────────
+// ── Розміри поля та відцентрилювання ──────────────────────────────────
+const COLS = 29; 
+const ROWS = 15; 
+const OFFSET_X = Math.floor((GAME.width - COLS * TILE) / 2);  
+const OFFSET_Y = Math.floor((GAME.height - ROWS * TILE) / 2); 
+
+// ── Інпут (WASD / ЦФІВ / Стрілки) ────────────────────────────────────
 const keys = new Set();
 let spacePressed = false;
 
@@ -29,21 +32,20 @@ addEventListener('blur', () => keys.clear());
 
 const held = (...names) => names.some((n) => keys.has(n.toLowerCase()));
 
-// ── Рівень (Симетрична сітка 29х15) ───────────────────────────────────
+// ── Просторне та симетричне поле ──────────────────────────────────────
 const LEVEL = [];
 for (let r = 0; r < ROWS; r++) {
   const row = [];
   for (let c = 0; c < COLS; c++) {
     const isOuterWall = c === 0 || r === 0 || c === COLS - 1 || r === ROWS - 1;
-    // Стовпчики малюються суворо через 1 клітинку (парні рядки та стовпчики)
-    const isPillar = (r % 2 === 0) && (c % 2 === 0);
+    // Колонки малюються рідше (через 3 клітинки по горизонталі та 2 по вертикалі)
+    const isPillar = (r % 3 === 0) && (c % 4 === 0);
     row.push(isOuterWall || isPillar ? 1 : 0);
   }
   LEVEL.push(row);
 }
 
 function boxHitsWall(x, y, w, h) {
-  // Переведення абсолютних координат Canvas у координати сітки рівня
   const relX0 = x - OFFSET_X;
   const relY0 = y - OFFSET_Y;
   const relX1 = x + w - 1 - OFFSET_X;
@@ -73,7 +75,7 @@ function moveAxis(entity, dx, dy) {
   return true;
 }
 
-// ── Спрайтова анімація 70х70 ──────────────────────────────────────────
+// ── Спрайтова анімація (кадр 70х70) ───────────────────────────────────
 class SpriteSheet {
   constructor(src, frameW, frameH) {
     this.img = new Image();
@@ -118,7 +120,6 @@ const explosions = [];
 function spawnPickup() {
   const s = T.pickups.size;
   for (let tries = 0; tries < 300; tries++) {
-    // Спавн монетки суворо в межах ігрового поля
     const c = Math.floor(Math.random() * (COLS - 2)) + 1;
     const r = Math.floor(Math.random() * (ROWS - 2)) + 1;
     if (LEVEL[r][c] === 0) {
@@ -195,7 +196,7 @@ function update(dt) {
     player.frame = (player.frame + 1) % 7;
   }
 
-  // Обробка бомб
+  // Бомби
   for (let i = bombs.length - 1; i >= 0; i--) {
     const b = bombs[i];
     b.timer -= dt;
@@ -242,7 +243,7 @@ function update(dt) {
     if (exp.timer <= 0) explosions.splice(i, 1);
   }
 
-  // Збирання монеток
+  // Монетки
   for (let i = pickups.length - 1; i >= 0; i--) {
     const p = pickups[i];
     p.t += dt;
@@ -280,7 +281,6 @@ function render(ctx) {
   ctx.fillStyle = T.colors.background;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
 
-  // Отрисовка відцентрованої сітки
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (LEVEL[r][c] !== 1) continue;
@@ -322,8 +322,9 @@ function render(ctx) {
     ctx.stroke();
   }
 
-  const offsetX = (70 - player.w) / 2;
-  const offsetY = (70 - player.h) / 2;
+  // Відцентрування зменшеного спрайту DISPLAY_SIZE (42px) на хітбоксі player (25px)
+  const offsetX = (DISPLAY_SIZE - player.w) / 2;
+  const offsetY = (DISPLAY_SIZE - player.h) / 2;
 
   // 4. Гравець
   const drew = heroSheet.draw(
@@ -332,8 +333,8 @@ function render(ctx) {
     player.dir, 
     player.x - offsetX, 
     player.y - offsetY, 
-    70, 
-    70
+    DISPLAY_SIZE, 
+    DISPLAY_SIZE
   );
 
   if (!drew) {
@@ -345,8 +346,8 @@ function render(ctx) {
   if (enemy) {
     const eW = enemy.w || T.player.size;
     const eH = enemy.h || T.player.size;
-    const enemyOffsetX = (70 - eW) / 2;
-    const enemyOffsetY = (70 - eH) / 2;
+    const enemyOffsetX = (DISPLAY_SIZE - eW) / 2;
+    const enemyOffsetY = (DISPLAY_SIZE - eH) / 2;
 
     const drewEnemy = heroSheet.draw(
       ctx,
@@ -354,8 +355,8 @@ function render(ctx) {
       enemy.dir !== undefined ? enemy.dir : 8,
       enemy.x - enemyOffsetX,
       enemy.y - enemyOffsetY,
-      70,
-      70
+      DISPLAY_SIZE,
+      DISPLAY_SIZE
     );
 
     if (!drewEnemy) {
@@ -364,7 +365,6 @@ function render(ctx) {
     }
   }
 
-  // Інтерфейс підрахунку
   const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
   ctx.fillStyle = '#ffffff';
   ctx.font = '14px monospace';
