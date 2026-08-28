@@ -346,7 +346,47 @@ function render(ctx) {
   ctx.font = '14px monospace';
   ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
 }
+// 4. Гравець з вирівнюванням по центру хітбоксу
+  const offsetX = (70 - player.w) / 2; // зсув спрайту 70x70 відносно хітбоксу 25x25
+  const offsetY = (70 - player.h) / 2;
 
+  const drew = heroSheet.draw(
+    ctx, 
+    player.frame, 
+    player.dir, 
+    player.x - offsetX, 
+    player.y - offsetY, 
+    70, 
+    70
+  );
+
+  if (!drew) {
+    ctx.fillStyle = T.colors.player;
+    ctx.fillRect(Math.round(player.x), Math.round(player.y), player.w, player.h);
+  }
+
+  // 5. Супротивник / Бот
+  if (enemy) {
+    const eW = enemy.w || T.player.size;
+    const eH = enemy.h || T.player.size;
+    const enemyOffsetX = (70 - eW) / 2;
+    const enemyOffsetY = (70 - eH) / 2;
+
+    const drewEnemy = heroSheet.draw(
+      ctx,
+      enemy.frame || 0,
+      enemy.dir !== undefined ? enemy.dir : 8,
+      enemy.x - enemyOffsetX,
+      enemy.y - enemyOffsetY,
+      70,
+      70
+    );
+
+    if (!drewEnemy) {
+      ctx.fillStyle = T.colors.enemy || '#ff595e';
+      ctx.fillRect(Math.round(enemy.x), Math.round(enemy.y), eW, eH);
+    }
+  }
 // ── Цикл з фіксованим кроком ──────────────────────────────────────────
 let onScoreChange = null;
 export function setScoreListener(fn) { onScoreChange = fn; }
