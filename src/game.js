@@ -10,14 +10,21 @@ const keys = new Set();
 let spacePressed = false;
 
 addEventListener('keydown', (e) => {
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+  const key = e.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'w', 'a', 's', 'd', 'ц', 'ф', 'і', 'в'].includes(key)) {
+    e.preventDefault();
+  }
   if (e.key === ' ' && !e.repeat) spacePressed = true;
-  keys.add(e.key.toLowerCase());
+  keys.add(key);
 });
-addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+addEventListener('keyup', (e) => {
+  keys.delete(e.key.toLowerCase());
+});
+
 addEventListener('blur', () => keys.clear());
 
-const held = (...names) => names.some((n) => keys.has(n));
+const held = (...names) => names.some((n) => keys.has(n.toLowerCase()));
 
 // ── Рівень ────────────────────────────────────────────────────────────
 const LEVEL = [];
