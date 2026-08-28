@@ -57,7 +57,7 @@ function moveAxis(entity, dx, dy) {
   return true;
 }
 
-// ── Спрайтова анімація ────────────────────────────────────────────────
+// ── Спрайтова анімація 70х70 (7 кадрів на 9 рядків) ────────────────────
 class SpriteSheet {
   constructor(src, frameW, frameH) {
     this.img = new Image();
@@ -79,14 +79,16 @@ class SpriteSheet {
   }
 }
 
-const heroSheet = new SpriteSheet('assets/hero.png', 32, 32);
+// Завантажуємо спрайтшит з розміром кадру 70x70
+const heroSheet = new SpriteSheet('assets/hero.png', 70, 70);
 
 // ── Стан ──────────────────────────────────────────────────────────────
 const player = {
   x: TILE * 2, y: TILE * 2,
   w: T.player.size, h: T.player.size,
   speed: T.player.speed,
-  dir: 0, frame: 0, frameTimer: 0, moving: false,
+  dir: 8, // За замовчуванням 8 (стан спокою [•])
+  frame: 0, frameTimer: 0, moving: false,
   usedBombs: 0
 };
 
@@ -109,7 +111,6 @@ for (let i = 0; i < T.pickups.count; i++) spawnPickup();
 
 const state = { score: 0, time: 0, running: true };
 
-// Ставимо бомбу точно по центру об'єкта
 export function placeBomb(ownerX, ownerY, scoreVal, usedBombsCounter) {
   const available = Math.floor(scoreVal / 25) - usedBombsCounter;
   if (available > 0) {
@@ -135,13 +136,20 @@ function update(dt) {
   if (held('arrowup', 'w', 'ц')) dy -= 1;
   if (held('arrowdown', 's', 'і')) dy += 1;
 
-  if (dx && dy) { const k = Math.SQRT1_2; dx *= k; dy *= k; }
-
   player.moving = dx !== 0 || dy !== 0;
-  if (dx < 0) player.dir = 1;
-  else if (dx > 0) player.dir = 2;
-  else if (dy < 0) player.dir = 3;
-  else if (dy > 0) player.dir = 0;
+
+  // Визначення одного з 8 напрямків руху або 9-го (спокій)
+  if (dx > 0 && dy === 0)       player.dir = 0; // [→] Вправо
+  else if (dx > 0 && dy > 0)   player.dir = 1; // [↘] Вправо-вниз
+  else if (dx === 0 && dy > 0)  player.dir = 2; // [↓] Вниз
+  else if (dx < 0 && dy > 0)   player.dir = 3; // [↙] Вліво-вниз
+  else if (dx < 0 && dy === 0)  player.dir = 4; // [←] Вліво
+  else if (dx < 0 && dy < 0)   player.dir = 5; // [↖] Вліво-вгору
+  else if (dx === 0 && dy < 0)  player.dir = 6; // [↑] Вгору
+  else if (dx > 0 && dy < 0)   player.dir = 7; // [↗] Вправо-вгору
+  else if (!player.moving)     player.dir = 8; // [•] Стан спокою (Idle)
+
+  if (dx && dy) { const k = Math.SQRT1_2; dx *= k; dy *= k; }
 
   moveAxis(player, dx * player.speed * dt, 0);
   moveAxis(player, 0, dy * player.speed * dt);
@@ -160,14 +168,20 @@ function update(dt) {
 
   tickBot(pickups, boxHitsWall, player, dt);
 
+  // Перемикання 7 кадрів анімації
   if (player.moving) {
     player.frameTimer += dt;
     if (player.frameTimer > 1 / T.player.animationSpeed) {
       player.frameTimer = 0;
-      player.frame = (player.frame + 1) % 4;
+      player.frame = (player.frame + 1) % 7; // 7 кадрів
     }
   } else {
-    player.frame = 0;
+    // У стані спокою гравець також може анімуватися (або зафіксувати 0 кадр)
+    player.frameTimer += dt;
+    if (player.frameTimer > 1 / (T.player.animationSpeed / 2)) {
+      player.frameTimer = 0;
+      player.frame = (player.frame + 1) % 7; 
+    }
   }
 
   // Логіка оновлення бомб і вибухів
@@ -176,10 +190,8 @@ function update(dt) {
     b.timer -= dt;
 
     if (b.timer <= 0) {
-      // 1. Анімація вибуху
       explosions.push({ x: b.x, y: b.y, radius: b.radius, timer: 0.3 });
 
-      // 2. Ураження ГРАВЦЯ (Респавн + Штраф)
       const playerDist = Math.hypot((player.x + player.w / 2) - b.x, (player.y + player.h / 2) - b.y);
       if (playerDist <= b.radius) {
         player.x = TILE * 2;
@@ -188,7 +200,6 @@ function update(dt) {
         onScoreChange?.(state.score);
       }
 
-      // 3. Ураження БОТА / СУПРОТИВНИКА (Респавн)
       if (enemy) {
         const enemyW = enemy.w || T.player.size;
         const enemyH = enemy.h || T.player.size;
@@ -202,7 +213,6 @@ function update(dt) {
         }
       }
 
-      // 4. Вибух знищує монетки
       for (let j = pickups.length - 1; j >= 0; j--) {
         const p = pickups[j];
         if (Math.hypot((p.x + p.w / 2) - b.x, (p.y + p.h / 2) - b.y) <= b.radius) {
@@ -215,7 +225,6 @@ function update(dt) {
     }
   }
 
-  // Логіка оновлення ефектів вибуху
   for (let i = explosions.length - 1; i >= 0; i--) {
     const exp = explosions[i];
     exp.timer -= dt;
@@ -311,7 +320,7 @@ function render(ctx) {
     const drewEnemy = heroSheet.draw(
       ctx,
       enemy.frame || 0,
-      enemy.dir || 0,
+      enemy.dir !== undefined ? enemy.dir : 8,
       enemy.x,
       enemy.y,
       enemy.w || T.player.size,
