@@ -3,9 +3,15 @@ import { TUNING } from './tuning.js';
 import { enemy, sendMyMovement, tickBot, isPlayingWithBot, respawnBot } from './main.js';
 
 const T = TUNING;
-const TILE = T.field.tile;
+const TILE = T.field.tile; // 32px
 
-// ── Інпут (WASD / ЦФІВ / Стрілки) ────────────────────────────────────
+// ── Розміри поля та відцентрилювання ──────────────────────────────────
+const COLS = 29; // 29 * 32 = 928px
+const ROWS = 15; // 15 * 32 = 480px
+const OFFSET_X = Math.floor((GAME.width - COLS * TILE) / 2);  // (960 - 928) / 2 = 16px
+const OFFSET_Y = Math.floor((GAME.height - ROWS * TILE) / 2); // (540 - 480) / 2 = 30px
+
+// ── Інпут ─────────────────────────────────────────────────────────────
 const keys = new Set();
 let spacePressed = false;
 
@@ -18,38 +24,41 @@ addEventListener('keydown', (e) => {
   keys.add(key);
 });
 
-addEventListener('keyup', (e) => {
-  keys.delete(e.key.toLowerCase());
-});
-
+addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
 
 const held = (...names) => names.some((n) => keys.has(n.toLowerCase()));
 
-// ── Рівень ────────────────────────────────────────────────────────────
+// ── Рівень (Симетрична сітка 29х15) ───────────────────────────────────
 const LEVEL = [];
-{
-  const cols = Math.ceil(GAME.width / TILE);
-  const rows = Math.ceil(GAME.height / TILE);
-  for (let y = 0; y < rows; y++) {
-    const row = [];
-    for (let x = 0; x < cols; x++) {
-      const edge = x === 0 || y === 0 || x === cols - 1 || y === rows - 1;
-      const blob = (x % T.field.wallPatternX === 3 && y % T.field.wallPatternY === 2);
-      row.push(edge || blob ? 1 : 0);
-    }
-    LEVEL.push(row);
+for (let r = 0; r < ROWS; r++) {
+  const row = [];
+  for (let c = 0; c < COLS; c++) {
+    const isOuterWall = c === 0 || r === 0 || c === COLS - 1 || r === ROWS - 1;
+    // Стовпчики малюються суворо через 1 клітинку (парні рядки та стовпчики)
+    const isPillar = (r % 2 === 0) && (c % 2 === 0);
+    row.push(isOuterWall || isPillar ? 1 : 0);
   }
+  LEVEL.push(row);
 }
 
 function boxHitsWall(x, y, w, h) {
-  const c0 = Math.floor(x / TILE);
-  const c1 = Math.floor((x + w - 1) / TILE);
-  const r0 = Math.floor(y / TILE);
-  const r1 = Math.floor((y + h - 1) / TILE);
+  // Переведення абсолютних координат Canvas у координати сітки рівня
+  const relX0 = x - OFFSET_X;
+  const relY0 = y - OFFSET_Y;
+  const relX1 = x + w - 1 - OFFSET_X;
+  const relY1 = y + h - 1 - OFFSET_Y;
+
+  const c0 = Math.floor(relX0 / TILE);
+  const c1 = Math.floor(relX1 / TILE);
+  const r0 = Math.floor(relY0 / TILE);
+  const r1 = Math.floor(relY1 / TILE);
+
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
-      if (LEVEL[r]?.[c] === 1) return true;
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || LEVEL[r]?.[c] === 1) {
+        return true;
+      }
     }
   }
   return false;
@@ -64,7 +73,7 @@ function moveAxis(entity, dx, dy) {
   return true;
 }
 
-// ── Спрайтова анімація 70х70 (7 кадрів на 9 рядків) ────────────────────
+// ── Спрайтова анімація 70х70 ──────────────────────────────────────────
 class SpriteSheet {
   constructor(src, frameW, frameH) {
     this.img = new Image();
@@ -90,11 +99,15 @@ const heroSheet = new SpriteSheet('assets/hero.png', 70, 70);
 
 // ── Стан ──────────────────────────────────────────────────────────────
 const player = {
-  x: TILE * 2, y: TILE * 2,
-  w: T.player.size, h: T.player.size,
+  x: OFFSET_X + TILE * 1.5, 
+  y: OFFSET_Y + TILE * 1.5,
+  w: T.player.size, 
+  h: T.player.size,
   speed: T.player.speed,
-  dir: 8, // За замовчуванням 8 (стан спокою [•])
-  frame: 0, frameTimer: 0, moving: false,
+  dir: 8,
+  frame: 0, 
+  frameTimer: 0, 
+  moving: false,
   usedBombs: 0
 };
 
@@ -104,10 +117,13 @@ const explosions = [];
 
 function spawnPickup() {
   const s = T.pickups.size;
-  for (let tries = 0; tries < 200; tries++) {
-    const x = Math.random() * (GAME.width - 40) + 20;
-    const y = Math.random() * (GAME.height - 40) + 20;
-    if (!boxHitsWall(x, y, s, s)) {
+  for (let tries = 0; tries < 300; tries++) {
+    // Спавн монетки суворо в межах ігрового поля
+    const c = Math.floor(Math.random() * (COLS - 2)) + 1;
+    const r = Math.floor(Math.random() * (ROWS - 2)) + 1;
+    if (LEVEL[r][c] === 0) {
+      const x = OFFSET_X + c * TILE + (TILE - s) / 2;
+      const y = OFFSET_Y + r * TILE + (TILE - s) / 2;
       pickups.push({ x, y, w: s, h: s, t: 0 });
       return;
     }
@@ -144,16 +160,15 @@ function update(dt) {
 
   player.moving = dx !== 0 || dy !== 0;
 
-  // Визначення напрямку (0..7 для руху, 8 для спокою)
-  if (dx > 0 && dy === 0)       player.dir = 0; // [→] Вправо
-  else if (dx > 0 && dy > 0)   player.dir = 1; // [↘] Вправо-вниз
-  else if (dx === 0 && dy > 0)  player.dir = 2; // [↓] Вниз
-  else if (dx < 0 && dy > 0)   player.dir = 3; // [↙] Вліво-вниз
-  else if (dx < 0 && dy === 0)  player.dir = 4; // [←] Вліво
-  else if (dx < 0 && dy < 0)   player.dir = 5; // [↖] Вліво-вгору
-  else if (dx === 0 && dy < 0)  player.dir = 6; // [↑] Вгору
-  else if (dx > 0 && dy < 0)   player.dir = 7; // [↗] Вправо-вгору
-  else if (!player.moving)     player.dir = 8; // [•] Спокій (Idle)
+  if (dx > 0 && dy === 0)       player.dir = 0;
+  else if (dx > 0 && dy > 0)   player.dir = 1;
+  else if (dx === 0 && dy > 0)  player.dir = 2;
+  else if (dx < 0 && dy > 0)   player.dir = 3;
+  else if (dx < 0 && dy === 0)  player.dir = 4;
+  else if (dx < 0 && dy < 0)   player.dir = 5;
+  else if (dx === 0 && dy < 0)  player.dir = 6;
+  else if (dx > 0 && dy < 0)   player.dir = 7;
+  else if (!player.moving)     player.dir = 8;
 
   if (dx && dy) { const k = Math.SQRT1_2; dx *= k; dy *= k; }
 
@@ -173,7 +188,6 @@ function update(dt) {
 
   tickBot(pickups, boxHitsWall, player, dt);
 
-  // Кадри анімації
   player.frameTimer += dt;
   const animSpeed = player.moving ? T.player.animationSpeed : (T.player.animationSpeed / 2);
   if (player.frameTimer > 1 / animSpeed) {
@@ -181,7 +195,7 @@ function update(dt) {
     player.frame = (player.frame + 1) % 7;
   }
 
-  // Бомби та вибухи
+  // Обробка бомб
   for (let i = bombs.length - 1; i >= 0; i--) {
     const b = bombs[i];
     b.timer -= dt;
@@ -191,8 +205,8 @@ function update(dt) {
 
       const playerDist = Math.hypot((player.x + player.w / 2) - b.x, (player.y + player.h / 2) - b.y);
       if (playerDist <= b.radius) {
-        player.x = TILE * 2;
-        player.y = TILE * 2;
+        player.x = OFFSET_X + TILE * 1.5;
+        player.y = OFFSET_Y + TILE * 1.5;
         state.score = Math.max(0, state.score - 50);
         onScoreChange?.(state.score);
       }
@@ -228,7 +242,7 @@ function update(dt) {
     if (exp.timer <= 0) explosions.splice(i, 1);
   }
 
-  // Монетки
+  // Збирання монеток
   for (let i = pickups.length - 1; i >= 0; i--) {
     const p = pickups[i];
     p.t += dt;
@@ -266,13 +280,16 @@ function render(ctx) {
   ctx.fillStyle = T.colors.background;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
 
-  for (let r = 0; r < LEVEL.length; r++) {
-    for (let c = 0; c < LEVEL[r].length; c++) {
+  // Отрисовка відцентрованої сітки
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
       if (LEVEL[r][c] !== 1) continue;
+      const wx = OFFSET_X + c * TILE;
+      const wy = OFFSET_Y + r * TILE;
       ctx.fillStyle = T.colors.wall;
-      ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+      ctx.fillRect(wx, wy, TILE, TILE);
       ctx.fillStyle = T.colors.wallTop;
-      ctx.fillRect(c * TILE, r * TILE, TILE, 3);
+      ctx.fillRect(wx, wy, TILE, 3);
     }
   }
 
@@ -305,7 +322,6 @@ function render(ctx) {
     ctx.stroke();
   }
 
-  // Зсув спрайту 70х70 для відцентрування на хітбоксі 25х25
   const offsetX = (70 - player.w) / 2;
   const offsetY = (70 - player.h) / 2;
 
@@ -348,20 +364,21 @@ function render(ctx) {
     }
   }
 
-  // Панель статусу бомб
+  // Інтерфейс підрахунку
   const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
   ctx.fillStyle = '#ffffff';
   ctx.font = '14px monospace';
   ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
 }
 
-// ── Цикл з фіксованим кроком ──────────────────────────────────────────
+// ── Цикл ──────────────────────────────────────────────────────────────
 let onScoreChange = null;
 export function setScoreListener(fn) { onScoreChange = fn; }
 export function getState() { return state; }
 export function resetGame() {
   state.score = 0; state.time = 0; state.running = true;
-  player.x = TILE * 2; player.y = TILE * 2;
+  player.x = OFFSET_X + TILE * 1.5; 
+  player.y = OFFSET_Y + TILE * 1.5;
   player.usedBombs = 0;
   pickups.length = 0;
   bombs.length = 0;
