@@ -24,7 +24,7 @@ export const enemy = {
   score: 0
 };
 
-// Клас Бота (із захистом від застрягання Anti-Stuck)
+// Клас Бота із захистом від застрягання (Anti-Stuck)
 class Bot {
   constructor(x = 200, y = 200) {
     this.x = x;
@@ -34,7 +34,7 @@ class Bot {
     this.speed = TUNING.enemy.botSpeed || 150;
     this.avoidDir = 1;
     this.detourTimer = 0;
-    this.stuckTimer = 0; // Таймер примусового виходу із застрягання
+    this.stuckTimer = 0;
     this.stuckDirX = 0;
     this.stuckDirY = 0;
     this.dir = 8;
@@ -61,7 +61,6 @@ class Bot {
     if (this.bombCooldown > 0) this.bombCooldown -= dt;
     if (this.detourTimer > 0) this.detourTimer -= dt;
 
-    // Якщо активовано режим спасіння від застрягання
     if (this.stuckTimer > 0) {
       this.stuckTimer -= dt;
       const stepX = this.stuckDirX * this.speed * dt;
@@ -143,10 +142,8 @@ class Bot {
     const movedY = this.y - oldY;
     const actualDistMoved = Math.hypot(movedX, movedY);
 
-    // Перевірка на застрягання: якщо мав рухатися, але зсунувся менше ніж на 0.2px
     if (dist > 8 && actualDistMoved < 0.2) {
-      this.stuckTimer = 0.35; // 0.35 секунди примусового ривка
-      // Вибираємо вільний напрямок для ривка
+      this.stuckTimer = 0.35;
       if (!boxHitsWallFn(this.x, this.y - 10, this.w, this.h)) { this.stuckDirX = 0; this.stuckDirY = -1; }
       else if (!boxHitsWallFn(this.x, this.y + 10, this.w, this.h)) { this.stuckDirX = 0; this.stuckDirY = 1; }
       else if (!boxHitsWallFn(this.x - 10, this.y, this.w, this.h)) { this.stuckDirX = -1; this.stuckDirY = 0; }
@@ -185,6 +182,24 @@ class Bot {
     enemy.dir = this.dir;
     enemy.frame = this.frame;
     enemy.moving = isMoving;
+  }
+}
+
+export function tickBot(pickupsList, boxHitsWallFn, playerObj, dt) {
+  if (isPlayingWithBot && botInstance) {
+    botInstance.update(pickupsList, boxHitsWallFn, playerObj, dt);
+  }
+}
+
+export function respawnBot() {
+  if (botInstance) {
+    botInstance.x = GAME.width - 80;
+    botInstance.y = GAME.height - 80;
+    enemy.x = botInstance.x;
+    enemy.y = botInstance.y;
+  } else {
+    enemy.x = GAME.width - 80;
+    enemy.y = GAME.height - 80;
   }
 }
 
