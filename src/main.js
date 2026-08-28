@@ -1,7 +1,7 @@
 import { GAME } from './config.js';
 import { TUNING } from './tuning.js';
 import { start, setScoreListener, getState, resetGame, placeBomb } from './game.js';
-import { topScores, submitScore, dbReady, supabase } from './db.js'; // Імпортуємо єдиний supabase з db.js
+import { topScores, submitScore, dbReady, supabase } from './db.js';
 
 const playerId = 'player_' + Math.random().toString(36).substr(2, 9);
 
@@ -17,23 +17,23 @@ export const enemy = {
   y: 200,
   w: TUNING.player.size,
   h: TUNING.player.size,
-  dir: 0,
+  dir: 8,
   frame: 0,
   frameTimer: 0,
   moving: false,
   score: 0
 };
 
-// 2. Клас Бота
+// 2. Клас Бота з підтримкою 70х70 спрайтів та 8 напрямків руху
 class Bot {
   constructor(x = 200, y = 200) {
     this.x = x;
     this.y = y;
     this.w = TUNING.player.size;
     this.h = TUNING.player.size;
-    this.speed = 135;
+    this.speed = TUNING.enemy.botSpeed || 150;
     this.avoidDir = 1;
-    this.dir = 0;
+    this.dir = 8; // [•] Спокій
     this.frame = 0;
     this.frameTimer = 0;
     this.usedBombs = 0;
@@ -80,6 +80,7 @@ class Bot {
 
     if (!target) return;
 
+    // Авто-бомба бота при наближенні
     if (minDist < 40 && this.bombCooldown <= 0) {
       if (placeBomb(this.x, this.y, enemy.score, this.usedBombs)) {
         this.usedBombs++;
@@ -128,22 +129,30 @@ class Bot {
     const movedY = this.y - oldY;
     const isMoving = Math.abs(movedX) > 0.05 || Math.abs(movedY) > 0.05;
 
-    if (Math.abs(movedX) > Math.abs(movedY)) {
-      if (movedX < 0) this.dir = 1;
-      else if (movedX > 0) this.dir = 2;
-    } else if (Math.abs(movedY) > 0.05) {
-      if (movedY < 0) this.dir = 3;
-      else if (movedY > 0) this.dir = 0;
-    }
-
+    // Обчислення 8-векторної анімації бота (9 рядків, 7 кадрів)
     if (isMoving) {
+      const angle = Math.atan2(movedY, movedX);
+      if (angle >= -Math.PI / 8 && angle < Math.PI / 8) this.dir = 0;       // [→]
+      else if (angle >= Math.PI / 8 && angle < 3 * Math.PI / 8) this.dir = 1;  // [↘]
+      else if (angle >= 3 * Math.PI / 8 && angle < 5 * Math.PI / 8) this.dir = 2;// [↓]
+      else if (angle >= 5 * Math.PI / 8 && angle < 7 * Math.PI / 8) this.dir = 3;// [↙]
+      else if (angle >= 7 * Math.PI / 8 || angle < -7 * Math.PI / 8) this.dir = 4;// [←]
+      else if (angle >= -7 * Math.PI / 8 && angle < -5 * Math.PI / 8) this.dir = 5;// [↖]
+      else if (angle >= -5 * Math.PI / 8 && angle < -3 * Math.PI / 8) this.dir = 6;// [↑]
+      else if (angle >= -3 * Math.PI / 8 && angle < -Math.PI / 8) this.dir = 7;  // [↗]
+
       this.frameTimer += dt;
       if (this.frameTimer > 1 / TUNING.player.animationSpeed) {
         this.frameTimer = 0;
-        this.frame = (this.frame + 1) % 4;
+        this.frame = (this.frame + 1) % 7;
       }
     } else {
-      this.frame = 0;
+      this.dir = 8; // [•] Спокій
+      this.frameTimer += dt;
+      if (this.frameTimer > 1 / (TUNING.player.animationSpeed / 2)) {
+        this.frameTimer = 0;
+        this.frame = (this.frame + 1) % 7;
+      }
     }
 
     enemy.x = this.x;
@@ -175,7 +184,7 @@ export function respawnBot() {
 // 3. Метчмейкінг без хибного фолбеку на бота
 async function findMatch() {
   const statusEl = document.getElementById('status');
-  if (statusEl) statusEl.textContent = 'Шукаємо суперника (до 30 сек)...';
+  if (statusEl) statusEl.textContent = TUNING.texts.statusSearching;
 
   if (pollInterval) clearInterval(pollInterval);
   if (botTimeout) clearTimeout(botTimeout);
@@ -186,7 +195,12 @@ async function findMatch() {
 
   console.log("🚀 [MATCH] Початок пошуку. Мій ID:", playerId);
 
-  // 1. Спроба видалити старі записи (без вильоту в бот-режим у разі помилки)
+  if (!supabase) {
+    console.error("❌ Supabase не підключено!");
+    startPVEBotGame();
+    return;
+  }
+
   try {
     const thirtySecAgo = new Date(Date.now() - 30000).toISOString();
     await supabase.from('matchmaking_queue').delete().lt('created_at', thirtySecAgo);
@@ -194,7 +208,6 @@ async function findMatch() {
     console.warn("Попередження при очищенні черги:", e);
   }
 
-  // 2. Шукаємо суперника, який чекає
   const { data: waitingList, error: selectErr } = await supabase
     .from('matchmaking_queue')
     .select('*')
@@ -206,7 +219,6 @@ async function findMatch() {
     console.error("❌ Помилка читання черги (перевірте SQL таблицю в Supabase):", selectErr);
   }
 
-  // Якщо знайшли — підключаємось як player2
   if (waitingList && waitingList.length > 0) {
     const opponent = waitingList[0];
     const roomId = `room_${opponent.id}`;
@@ -222,7 +234,6 @@ async function findMatch() {
     return;
   }
 
-  // 3. Якщо нікого немає — додаємо себе в чергу
   const { data: myEntryArray, error: insertErr } = await supabase
     .from('matchmaking_queue')
     .insert([{ player_id: playerId, status: 'waiting' }])
@@ -230,7 +241,6 @@ async function findMatch() {
 
   if (insertErr || !myEntryArray || myEntryArray.length === 0) {
     console.error("❌ Помилка створення запису в черзі:", insertErr);
-    // Якщо дійсно не вдалося записатися в БД, лише тоді включаємо бота
     startPVEBotGame();
     return;
   }
@@ -238,7 +248,6 @@ async function findMatch() {
   const myEntry = myEntryArray[0];
   console.log("⏳ Записано в чергу з ID:", myEntry.id, "Чекаємо 30 секунд...");
 
-  // 4. Опитання (Polling) щосекунди
   pollInterval = setInterval(async () => {
     const { data: checkArray } = await supabase
       .from('matchmaking_queue')
@@ -256,7 +265,6 @@ async function findMatch() {
     }
   }, 1000);
 
-  // 5. ТАЙМАУТ СТРОВО 30 СЕКУНД
   botTimeout = setTimeout(async () => {
     console.log("⏰ 30 секунд минуло. Запуск бота.");
     clearInterval(pollInterval);
@@ -269,13 +277,13 @@ async function findMatch() {
     if (!currentRoom) {
       startPVEBotGame();
     }
-  }, 30000);
+  }, (TUNING.matchmaking.matchTimeoutSeconds || 30) * 1000);
 }
 
 function startPVEBotGame() {
   if (pollInterval) clearInterval(pollInterval);
   const statusEl = document.getElementById('status');
-  if (statusEl) statusEl.textContent = '🤖 Гра проти БОТА';
+  if (statusEl) statusEl.textContent = TUNING.texts.statusBot;
   
   isPlayingWithBot = true;
   botInstance = new Bot(200, 200);
@@ -286,7 +294,7 @@ function startPVPGame(roomId, role) {
   if (botTimeout) clearTimeout(botTimeout);
 
   const statusEl = document.getElementById('status');
-  if (statusEl) statusEl.textContent = `⚔️ Гра проти гравця (${role})`;
+  if (statusEl) statusEl.textContent = `${TUNING.texts.statusPVP} (${role})`;
 
   isPlayingWithBot = false;
   currentRoom = roomId;
@@ -299,7 +307,7 @@ function startPVPGame(roomId, role) {
       if (payload.sender !== playerId) {
         enemy.x = payload.x;
         enemy.y = payload.y;
-        enemy.dir = payload.dir || 0;
+        enemy.dir = payload.dir !== undefined ? payload.dir : 8;
         enemy.frame = payload.frame || 0;
       }
     })
