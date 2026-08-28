@@ -6,7 +6,7 @@ const T = TUNING;
 const TILE = T.field.tile; // 32px
 
 // ── Візуальний розмір персонажа на екрані ─────────────────────────────
-const DISPLAY_SIZE = 42; // Зменшений компактний розмір (замість 70)
+const DISPLAY_SIZE = 42; 
 
 // ── Розміри поля та відцентрилювання ──────────────────────────────────
 const COLS = 29; 
@@ -38,7 +38,6 @@ for (let r = 0; r < ROWS; r++) {
   const row = [];
   for (let c = 0; c < COLS; c++) {
     const isOuterWall = c === 0 || r === 0 || c === COLS - 1 || r === ROWS - 1;
-    // Колонки малюються рідше (через 3 клітинки по горизонталі та 2 по вертикалі)
     const isPillar = (r % 3 === 0) && (c % 4 === 0);
     row.push(isOuterWall || isPillar ? 1 : 0);
   }
@@ -278,6 +277,7 @@ function update(dt) {
 
 // ── Малювання ─────────────────────────────────────────────────────────
 function render(ctx) {
+  // 1. Рендер ігрового світу та елементів
   ctx.fillStyle = T.colors.background;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
 
@@ -293,14 +293,14 @@ function render(ctx) {
     }
   }
 
-  // 1. Монетки
+  // Монетки
   for (const p of pickups) {
     const bob = Math.sin(p.t * T.pickups.bobSpeed) * T.pickups.bobHeight;
     ctx.fillStyle = T.colors.pickup;
     ctx.fillRect(p.x, p.y + bob, p.w, p.h);
   }
 
-  // 2. Бомби
+  // Бомби
   for (const b of bombs) {
     const blink = Math.sin(b.timer * 20) > 0;
     ctx.fillStyle = blink ? '#ff4444' : '#111111';
@@ -311,7 +311,7 @@ function render(ctx) {
     ctx.fillRect(b.x - 1, b.y - 14, 2, 5);
   }
 
-  // 3. Вибухи
+  // Вибухи
   for (const exp of explosions) {
     ctx.fillStyle = 'rgba(255, 100, 0, 0.5)';
     ctx.beginPath();
@@ -322,11 +322,10 @@ function render(ctx) {
     ctx.stroke();
   }
 
-  // Відцентрування зменшеного спрайту DISPLAY_SIZE (42px) на хітбоксі player (25px)
   const offsetX = (DISPLAY_SIZE - player.w) / 2;
   const offsetY = (DISPLAY_SIZE - player.h) / 2;
 
-  // 4. Гравець
+  // Гравець
   const drew = heroSheet.draw(
     ctx, 
     player.frame, 
@@ -342,7 +341,7 @@ function render(ctx) {
     ctx.fillRect(Math.round(player.x), Math.round(player.y), player.w, player.h);
   }
 
-  // 5. Супротивник / Бот
+  // Супротивник / Бот
   if (enemy) {
     const eW = enemy.w || T.player.size;
     const eH = enemy.h || T.player.size;
@@ -365,13 +364,89 @@ function render(ctx) {
     }
   }
 
+  // 2. Ефект темряви та ліхтариків (Lighting Mask)
+  ctx.save();
+  
+  function drawFlashlightCone(px, py, dirIndex, lightRadius = 180, coneAngle = Math.PI / 3.5) {
+    const angles = [
+      0,                  // 0: [→]
+      Math.PI / 4,        // 1: [↘]
+      Math.PI / 2,        // 2: [↓]
+      (3 * Math.PI) / 4,  // 3: [↙]
+      Math.PI,            // 4: [←]
+      -(3 * Math.PI) / 4, // 5: [↖]
+      -Math.PI / 2,       // 6: [↑]
+      -Math.PI / 4,       // 7: [↗]
+      Math.PI / 2         // 8: [•]
+    ];
+
+    const angle = angles[dirIndex !== undefined ? dirIndex : 8];
+
+    // Аура під ногами
+    const aura = ctx.createRadialGradient(px, py, 5, px, py, 40);
+    aura.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(px, py, 40, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Конус променя
+    const coneGrad = ctx.createRadialGradient(px, py, 10, px, py, lightRadius);
+    coneGrad.addColorStop(0, 'rgba(255, 255, 200, 0.95)');
+    coneGrad.addColorStop(0.7, 'rgba(255, 255, 180, 0.4)');
+    coneGrad.addColorStop(1, 'rgba(255, 255, 180, 0)');
+
+    ctx.fillStyle = coneGrad;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.arc(px, py, lightRadius, angle - coneAngle / 2, angle + coneAngle / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Тінь на весь екран
+  ctx.fillStyle = 'rgba(5, 4, 12, 0.93)';
+  ctx.fillRect(0, 0, GAME.width, GAME.height);
+
+  // Прорізаємо світло
+  ctx.globalCompositeOperation = 'destination-out';
+
+  // Світло гравця
+  const pCenterX = player.x + player.w / 2;
+  const pCenterY = player.y + player.h / 2;
+  drawFlashlightCone(pCenterX, pCenterY, player.dir, 200);
+
+  // Світло бота / суперника
+  if (enemy) {
+    const eW = enemy.w || T.player.size;
+    const eH = enemy.h || T.player.size;
+    const eCenterX = enemy.x + eW / 2;
+    const eCenterY = enemy.y + eH / 2;
+    drawFlashlightCone(eCenterX, eCenterY, enemy.dir, 180);
+  }
+
+  // Підсвічування вибухів
+  for (const exp of explosions) {
+    const expGrad = ctx.createRadialGradient(exp.x, exp.y, 5, exp.x, exp.y, exp.radius * 1.5);
+    expGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    expGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = expGrad;
+    ctx.beginPath();
+    ctx.arc(exp.x, exp.y, exp.radius * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // 3. Інтерфейс підрахунку
   const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
   ctx.fillStyle = '#ffffff';
   ctx.font = '14px monospace';
   ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
 }
 
-// ── Цикл ──────────────────────────────────────────────────────────────
+// ── Цикл з фіксованим кроком ──────────────────────────────────────────
 let onScoreChange = null;
 export function setScoreListener(fn) { onScoreChange = fn; }
 export function getState() { return state; }
