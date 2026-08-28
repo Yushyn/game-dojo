@@ -74,7 +74,7 @@ function moveAxis(entity, dx, dy) {
   return true;
 }
 
-// ── Спрайтова анімація (кадр 70х70) ───────────────────────────────────
+// ── Спрайтова анімація ────────────────────────────────────────────────
 class SpriteSheet {
   constructor(src, frameW, frameH) {
     this.img = new Image();
@@ -276,9 +276,8 @@ function update(dt) {
 }
 
 // ── Малювання ─────────────────────────────────────────────────────────
-function render(ctx) {
-  // КРОК 1. Малюємо картографію та стіни рівня
-  ctx.fillStyle = T.colors.background;
+function drawMap(ctx, isLit = false) {
+  ctx.fillStyle = isLit ? '#1b1828' : '#09080e'; // Підлога: світла у ліхтарику, темна поза ним
   ctx.fillRect(0, 0, GAME.width, GAME.height);
 
   for (let r = 0; r < ROWS; r++) {
@@ -286,90 +285,77 @@ function render(ctx) {
       if (LEVEL[r][c] !== 1) continue;
       const wx = OFFSET_X + c * TILE;
       const wy = OFFSET_Y + r * TILE;
-      ctx.fillStyle = T.colors.wall;
+
+      // Стіни у світлі яскраві, поза ним — ледь помітні силуети
+      ctx.fillStyle = isLit ? '#524b78' : '#141220';
       ctx.fillRect(wx, wy, TILE, TILE);
-      ctx.fillStyle = T.colors.wallTop;
+      ctx.fillStyle = isLit ? '#736ba6' : '#1d1a2e';
       ctx.fillRect(wx, wy, TILE, 3);
     }
   }
+}
 
-  // КРОК 2. Шар темряви з прорізанням світла від ліхтариків (малюється ПОВЕРХ стін, але ПІД персонажами)
-  ctx.save();
+function constructFlashlightPath(ctx, px, py, dirIndex, lightRadius = 260, coneAngle = Math.PI / 2.8) {
+  const angles = [
+    0,                  // 0: [→]
+    Math.PI / 4,        // 1: [↘]
+    Math.PI / 2,        // 2: [↓]
+    (3 * Math.PI) / 4,  // 3: [↙]
+    Math.PI,            // 4: [←]
+    -(3 * Math.PI) / 4, // 5: [↖]
+    -Math.PI / 2,       // 6: [↑]
+    -Math.PI / 4,       // 7: [↗]
+    Math.PI / 2         // 8: [•]
+  ];
+
+  const angle = angles[dirIndex !== undefined ? dirIndex : 8];
+
+  // Аура навколо
+  ctx.arc(px, py, 45, 0, Math.PI * 2);
   
-  function drawFlashlightCone(px, py, dirIndex, lightRadius = 220, coneAngle = Math.PI / 3) {
-    const angles = [
-      0,                  // 0: [→]
-      Math.PI / 4,        // 1: [↘]
-      Math.PI / 2,        // 2: [↓]
-      (3 * Math.PI) / 4,  // 3: [↙]
-      Math.PI,            // 4: [←]
-      -(3 * Math.PI) / 4, // 5: [↖]
-      -Math.PI / 2,       // 6: [↑]
-      -Math.PI / 4,       // 7: [↗]
-      Math.PI / 2         // 8: [•]
-    ];
+  // Конус
+  ctx.moveTo(px, py);
+  ctx.arc(px, py, lightRadius, angle - coneAngle / 2, angle + coneAngle / 2);
+  ctx.closePath();
+}
 
-    const angle = angles[dirIndex !== undefined ? dirIndex : 8];
+function render(ctx) {
+  // КРОК 1. Малюємо базову темну карту
+  drawMap(ctx, false);
 
-    // Кругова аура навколо персонажа
-    const aura = ctx.createRadialGradient(px, py, 5, px, py, 50);
-    aura.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = aura;
-    ctx.beginPath();
-    ctx.arc(px, py, 50, 0, Math.PI * 2);
-    ctx.fill();
+  // КРОК 2. Малюємо ЯСКРАВУ карту тільки там, куди світять ліхтарики
+  ctx.save();
+  ctx.beginPath();
 
-    // Яскравий конус світла
-    const coneGrad = ctx.createRadialGradient(px, py, 10, px, py, lightRadius);
-    coneGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    coneGrad.addColorStop(0.6, 'rgba(255, 255, 200, 0.6)');
-    coneGrad.addColorStop(1, 'rgba(255, 255, 180, 0)');
-
-    ctx.fillStyle = coneGrad;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.arc(px, py, lightRadius, angle - coneAngle / 2, angle + coneAngle / 2);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // Заливка екрана темрявою (88% прозорості дозволяє злегка бачити силуети стін)
-  ctx.fillStyle = 'rgba(5, 4, 12, 0.88)';
-  ctx.fillRect(0, 0, GAME.width, GAME.height);
-
-  // Режим вирізання світла
-  ctx.globalCompositeOperation = 'destination-out';
-
-  // Ліхтарик гравця
   const pCenterX = player.x + player.w / 2;
   const pCenterY = player.y + player.h / 2;
-  drawFlashlightCone(pCenterX, pCenterY, player.dir, 240);
+  constructFlashlightPath(ctx, pCenterX, pCenterY, player.dir, 260);
 
-  // Ліхтарик суперника/бота
   if (enemy) {
     const eW = enemy.w || T.player.size;
     const eH = enemy.h || T.player.size;
     const eCenterX = enemy.x + eW / 2;
     const eCenterY = enemy.y + eH / 2;
-    drawFlashlightCone(eCenterX, eCenterY, enemy.dir, 220);
+    constructFlashlightPath(ctx, eCenterX, eCenterY, enemy.dir, 240);
   }
 
-  // Підсвічування вибухів
-  for (const exp of explosions) {
-    const expGrad = ctx.createRadialGradient(exp.x, exp.y, 5, exp.x, exp.y, exp.radius * 1.5);
-    expGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    expGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = expGrad;
-    ctx.beginPath();
-    ctx.arc(exp.x, exp.y, exp.radius * 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // Обрізаємо зону рендеру суворо за конусами світла
+  ctx.clip();
 
-  ctx.restore(); // Повертаємо звичайний режим
+  // Малюємо яскраве поле та стіни у світлі
+  drawMap(ctx, true);
 
-  // КРОК 3. Малюємо всі ігрові об'єкти ПОВЕРХ темряви (тепер їх завжди чітко видно!)
-  
+  // М'який ефект світіння ліхтаря
+  const beamGrad = ctx.createRadialGradient(pCenterX, pCenterY, 10, pCenterX, pCenterY, 260);
+  beamGrad.addColorStop(0, 'rgba(255, 255, 230, 0.25)');
+  beamGrad.addColorStop(0.7, 'rgba(255, 255, 200, 0.08)');
+  beamGrad.addColorStop(1, 'rgba(255, 255, 200, 0)');
+  ctx.fillStyle = beamGrad;
+  ctx.fillRect(0, 0, GAME.width, GAME.height);
+
+  ctx.restore();
+
+  // КРОК 3. Малюємо ігрові об'єкти поверх усього
   // 1. Монетки
   for (const p of pickups) {
     const bob = Math.sin(p.t * T.pickups.bobSpeed) * T.pickups.bobHeight;
@@ -448,7 +434,7 @@ function render(ctx) {
   ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
 }
 
-// ── Цикл з фіксованим кроком ──────────────────────────────────────────
+// ── Цикл ──────────────────────────────────────────────────────────────
 let onScoreChange = null;
 export function setScoreListener(fn) { onScoreChange = fn; }
 export function getState() { return state; }
