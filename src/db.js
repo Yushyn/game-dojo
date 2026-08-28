@@ -1,11 +1,19 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
+
+// Завантажуємо офіційний SDK напряму
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.1/+esm';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
     detectSessionInUrl: false
+  },
+  global: {
+    headers: {
+      'apikey': SUPABASE_PUBLISHABLE_KEY,
+      'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+    }
   }
 });
 
@@ -26,7 +34,7 @@ export async function topScores(limit = 10) {
     }
     return data || [];
   } catch (e) {
-    console.error('Не вдалось прочитати лідерборд:', e);
+    console.error('Помилка лідерборду:', e);
     return [];
   }
 }
@@ -46,7 +54,6 @@ export async function submitScore(player, score) {
     }
     return { ok: true };
   } catch (e) {
-    console.error('Критична помилка збереження:', e);
     return { ok: false, reason: e.message };
   }
 }
