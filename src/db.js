@@ -1,18 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
 
-const configured =
-  !SUPABASE_URL.includes('ТВІЙ-ПРОЄКТ') &&
-  !SUPABASE_PUBLISHABLE_KEY.includes('ВСТАВ_СЮДИ');
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const dbReady = true;
 
-export const supabase = configured
-  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
-  : null;
-
-export const dbReady = configured;
-
-// Повертає топ-10. Якщо Supabase ще не налаштований — порожній список,
-// гра від цього не ламається.
 export async function topScores(limit = 10) {
   if (!supabase) return [];
   const { data, error } = await supabase
@@ -22,7 +13,7 @@ export async function topScores(limit = 10) {
     .limit(limit);
 
   if (error) {
-    console.error('Не вдалось прочитати лідерборд:', error.message);
+    console.error('Помилка лідерборду:', error.message);
     return [];
   }
   return data;
@@ -37,7 +28,7 @@ export async function submitScore(player, score) {
     .insert({ player: name, score: Math.floor(score) });
 
   if (error) {
-    console.error('Не вдалось записати результат:', error.message);
+    console.error('Помилка запису очок:', error.message);
     return { ok: false, reason: error.message };
   }
   return { ok: true };
