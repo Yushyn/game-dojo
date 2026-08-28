@@ -24,7 +24,7 @@ export const enemy = {
   score: 0
 };
 
-// 2. Клас Бота (з інтелектуальним ковзанням по кутах)
+// Клас Бота з інтелектуальним ковзанням по кутах
 class Bot {
   constructor(x = 200, y = 200) {
     this.x = x;
@@ -82,7 +82,6 @@ class Bot {
 
     if (!target) return;
 
-    // Бомби
     if (minDist < 40 && this.bombCooldown <= 0) {
       if (placeBomb(this.x, this.y, enemy.score, this.usedBombs)) {
         this.usedBombs++;
@@ -104,11 +103,9 @@ class Bot {
       const canX = !boxHitsWallFn(this.x + stepX, this.y, this.w, this.h);
       const canY = !boxHitsWallFn(this.x, this.y + stepY, this.w, this.h);
 
-      // 1. Рух по X з ковзанням
       if (canX) {
         this.x += stepX;
       } else {
-        // Якщо вперлися по X, перевіряємо, чи можна закруглити кут по Y (Smart Corner Slide)
         const slideUp = !boxHitsWallFn(this.x, this.y - this.speed * dt, this.w, this.h);
         const slideDown = !boxHitsWallFn(this.x, this.y + this.speed * dt, this.w, this.h);
 
@@ -125,11 +122,9 @@ class Bot {
         }
       }
 
-      // 2. Рух по Y з ковзанням
       if (canY) {
         this.y += stepY;
       } else {
-        // Якщо вперлися по Y, перевіряємо, чи можна закруглити кут по X
         const slideLeft = !boxHitsWallFn(this.x - this.speed * dt, this.y, this.w, this.h);
         const slideRight = !boxHitsWallFn(this.x + this.speed * dt, this.y, this.w, this.h);
 
@@ -151,7 +146,6 @@ class Bot {
     const movedY = this.y - oldY;
     const isMoving = Math.abs(movedX) > 0.05 || Math.abs(movedY) > 0.05;
 
-    // Анімація напрямку
     if (isMoving) {
       const angle = Math.atan2(movedY, movedX);
       if (angle >= -Math.PI / 8 && angle < Math.PI / 8) this.dir = 0;
@@ -185,7 +179,25 @@ class Bot {
   }
 }
 
-// 3. Метчмейкінг
+export function tickBot(pickupsList, boxHitsWallFn, playerObj, dt) {
+  if (isPlayingWithBot && botInstance) {
+    botInstance.update(pickupsList, boxHitsWallFn, playerObj, dt);
+  }
+}
+
+export function respawnBot() {
+  if (botInstance) {
+    botInstance.x = GAME.width - 80;
+    botInstance.y = GAME.height - 80;
+    enemy.x = botInstance.x;
+    enemy.y = botInstance.y;
+  } else {
+    enemy.x = GAME.width - 80;
+    enemy.y = GAME.height - 80;
+  }
+}
+
+// Метчмейкінг
 async function findMatch() {
   const statusEl = document.getElementById('status');
   if (statusEl) statusEl.textContent = TUNING.texts.statusSearching;
@@ -220,7 +232,7 @@ async function findMatch() {
     .order('created_at', { ascending: true });
 
   if (selectErr) {
-    console.error("❌ Помилка читання черги (перевірте SQL таблицю в Supabase):", selectErr);
+    console.error("❌ Помилка читання черги:", selectErr);
   }
 
   if (waitingList && waitingList.length > 0) {
@@ -328,7 +340,7 @@ export function sendMyMovement(x, y, dir, frame) {
   }
 }
 
-// 4. Інтерфейс
+// Інтерфейс
 const t = TUNING.texts;
 document.title = t.title;
 document.getElementById('title').textContent = t.title;
