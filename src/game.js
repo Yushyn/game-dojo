@@ -5,7 +5,7 @@ import { enemy, sendMyMovement, tickBot, isPlayingWithBot, respawnBot } from './
 const T = TUNING;
 const TILE = T.field.tile;
 
-// ── Інпут ─────────────────────────────────────────────────────────────
+// ── Інпут (WASD / ЦФІВ / Стрілки) ────────────────────────────────────
 const keys = new Set();
 let spacePressed = false;
 
@@ -86,7 +86,6 @@ class SpriteSheet {
   }
 }
 
-// Завантажуємо спрайтшит з розміром кадру 70x70
 const heroSheet = new SpriteSheet('assets/hero.png', 70, 70);
 
 // ── Стан ──────────────────────────────────────────────────────────────
@@ -145,7 +144,7 @@ function update(dt) {
 
   player.moving = dx !== 0 || dy !== 0;
 
-  // Визначення одного з 8 напрямків руху або 9-го (спокій)
+  // Визначення напрямку (0..7 для руху, 8 для спокою)
   if (dx > 0 && dy === 0)       player.dir = 0; // [→] Вправо
   else if (dx > 0 && dy > 0)   player.dir = 1; // [↘] Вправо-вниз
   else if (dx === 0 && dy > 0)  player.dir = 2; // [↓] Вниз
@@ -154,14 +153,13 @@ function update(dt) {
   else if (dx < 0 && dy < 0)   player.dir = 5; // [↖] Вліво-вгору
   else if (dx === 0 && dy < 0)  player.dir = 6; // [↑] Вгору
   else if (dx > 0 && dy < 0)   player.dir = 7; // [↗] Вправо-вгору
-  else if (!player.moving)     player.dir = 8; // [•] Стан спокою (Idle)
+  else if (!player.moving)     player.dir = 8; // [•] Спокій (Idle)
 
   if (dx && dy) { const k = Math.SQRT1_2; dx *= k; dy *= k; }
 
   moveAxis(player, dx * player.speed * dt, 0);
   moveAxis(player, 0, dy * player.speed * dt);
 
-  // Закладання бомби гравцем
   if (spacePressed) {
     if (placeBomb(player.x, player.y, state.score, player.usedBombs)) {
       player.usedBombs++;
@@ -175,23 +173,15 @@ function update(dt) {
 
   tickBot(pickups, boxHitsWall, player, dt);
 
-  // Перемикання 7 кадрів анімації
-  if (player.moving) {
-    player.frameTimer += dt;
-    if (player.frameTimer > 1 / T.player.animationSpeed) {
-      player.frameTimer = 0;
-      player.frame = (player.frame + 1) % 7; // 7 кадрів
-    }
-  } else {
-    // У стані спокою гравець також може анімуватися (або зафіксувати 0 кадр)
-    player.frameTimer += dt;
-    if (player.frameTimer > 1 / (T.player.animationSpeed / 2)) {
-      player.frameTimer = 0;
-      player.frame = (player.frame + 1) % 7; 
-    }
+  // Кадри анімації
+  player.frameTimer += dt;
+  const animSpeed = player.moving ? T.player.animationSpeed : (T.player.animationSpeed / 2);
+  if (player.frameTimer > 1 / animSpeed) {
+    player.frameTimer = 0;
+    player.frame = (player.frame + 1) % 7;
   }
 
-  // Логіка оновлення бомб і вибухів
+  // Бомби та вибухи
   for (let i = bombs.length - 1; i >= 0; i--) {
     const b = bombs[i];
     b.timer -= dt;
@@ -315,41 +305,11 @@ function render(ctx) {
     ctx.stroke();
   }
 
-  // 4. Гравець
-  const drew = heroSheet.draw(ctx, player.frame, player.dir, player.x, player.y, player.w, player.h);
-  if (!drew) {
-    ctx.fillStyle = T.colors.player;
-    ctx.fillRect(Math.round(player.x), Math.round(player.y), player.w, player.h);
-  }
-
-  // 5. Супротивник / Бот
-  if (enemy) {
-    const drewEnemy = heroSheet.draw(
-      ctx,
-      enemy.frame || 0,
-      enemy.dir !== undefined ? enemy.dir : 8,
-      enemy.x,
-      enemy.y,
-      enemy.w || T.player.size,
-      enemy.h || T.player.size
-    );
-
-    if (!drewEnemy) {
-      ctx.fillStyle = T.colors.enemy || '#ff595e';
-      ctx.fillRect(Math.round(enemy.x), Math.round(enemy.y), enemy.w || T.player.size, enemy.h || T.player.size);
-    }
-  }
-
-  // Панель статусу бомб
-  const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '14px monospace';
-  ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
-}
-// 4. Гравець з вирівнюванням по центру хітбоксу
-  const offsetX = (70 - player.w) / 2; // зсув спрайту 70x70 відносно хітбоксу 25x25
+  // Зсув спрайту 70х70 для відцентрування на хітбоксі 25х25
+  const offsetX = (70 - player.w) / 2;
   const offsetY = (70 - player.h) / 2;
 
+  // 4. Гравець
   const drew = heroSheet.draw(
     ctx, 
     player.frame, 
@@ -387,6 +347,14 @@ function render(ctx) {
       ctx.fillRect(Math.round(enemy.x), Math.round(enemy.y), eW, eH);
     }
   }
+
+  // Панель статусу бомб
+  const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '14px monospace';
+  ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
+}
+
 // ── Цикл з фіксованим кроком ──────────────────────────────────────────
 let onScoreChange = null;
 export function setScoreListener(fn) { onScoreChange = fn; }
