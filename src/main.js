@@ -24,7 +24,7 @@ export const enemy = {
   score: 0
 };
 
-// Клас Бота з інтелектуальним ковзанням по кутах
+// Клас Бота (із захистом від застрягання Anti-Stuck)
 class Bot {
   constructor(x = 200, y = 200) {
     this.x = x;
@@ -34,6 +34,9 @@ class Bot {
     this.speed = TUNING.enemy.botSpeed || 150;
     this.avoidDir = 1;
     this.detourTimer = 0;
+    this.stuckTimer = 0; // Таймер примусового виходу із застрягання
+    this.stuckDirX = 0;
+    this.stuckDirY = 0;
     this.dir = 8;
     this.frame = 0;
     this.frameTimer = 0;
@@ -43,7 +46,7 @@ class Bot {
   }
 
   hasLineOfSight(target, boxHitsWallFn) {
-    const steps = 12;
+    const steps = 10;
     for (let i = 1; i <= steps; i++) {
       const checkX = this.x + (target.x - this.x) * (i / steps);
       const checkY = this.y + (target.y - this.y) * (i / steps);
@@ -57,6 +60,20 @@ class Bot {
 
     if (this.bombCooldown > 0) this.bombCooldown -= dt;
     if (this.detourTimer > 0) this.detourTimer -= dt;
+
+    // Якщо активовано режим спасіння від застрягання
+    if (this.stuckTimer > 0) {
+      this.stuckTimer -= dt;
+      const stepX = this.stuckDirX * this.speed * dt;
+      const stepY = this.stuckDirY * this.speed * dt;
+      
+      if (!boxHitsWallFn(this.x + stepX, this.y, this.w, this.h)) this.x += stepX;
+      if (!boxHitsWallFn(this.x, this.y + stepY, this.w, this.h)) this.y += stepY;
+      
+      enemy.x = this.x;
+      enemy.y = this.y;
+      return;
+    }
 
     let target = null;
     let minDist = Infinity;
@@ -96,7 +113,7 @@ class Bot {
     let dy = target.y - this.y;
     const dist = Math.hypot(dx, dy);
 
-    if (dist > 6) {
+    if (dist > 8) {
       const stepX = (dx / dist) * this.speed * dt;
       const stepY = (dy / dist) * this.speed * dt;
 
@@ -105,46 +122,38 @@ class Bot {
 
       if (canX) {
         this.x += stepX;
-      } else {
-        const slideUp = !boxHitsWallFn(this.x, this.y - this.speed * dt, this.w, this.h);
-        const slideDown = !boxHitsWallFn(this.x, this.y + this.speed * dt, this.w, this.h);
-
-        if (dy < 0 && slideUp) {
-          this.y -= this.speed * dt;
-        } else if (dy > 0 && slideDown) {
-          this.y += this.speed * dt;
-        } else if (slideUp || slideDown) {
-          if (this.detourTimer <= 0) {
-            this.avoidDir = slideUp ? -1 : 1;
-            this.detourTimer = 0.5;
-          }
-          this.y += this.speed * dt * this.avoidDir;
+      } else if (Math.abs(dy) > 2) {
+        const slideY = Math.sign(dy) * this.speed * dt;
+        if (!boxHitsWallFn(this.x, this.y + slideY, this.w, this.h)) {
+          this.y += slideY;
         }
       }
 
       if (canY) {
         this.y += stepY;
-      } else {
-        const slideLeft = !boxHitsWallFn(this.x - this.speed * dt, this.y, this.w, this.h);
-        const slideRight = !boxHitsWallFn(this.x + this.speed * dt, this.y, this.w, this.h);
-
-        if (dx < 0 && slideLeft) {
-          this.x -= this.speed * dt;
-        } else if (dx > 0 && slideRight) {
-          this.x += this.speed * dt;
-        } else if (slideLeft || slideRight) {
-          if (this.detourTimer <= 0) {
-            this.avoidDir = slideLeft ? -1 : 1;
-            this.detourTimer = 0.5;
-          }
-          this.x += this.speed * dt * this.avoidDir;
+      } else if (Math.abs(dx) > 2) {
+        const slideX = Math.sign(dx) * this.speed * dt;
+        if (!boxHitsWallFn(this.x + slideX, this.y, this.w, this.h)) {
+          this.x += slideX;
         }
       }
     }
 
     const movedX = this.x - oldX;
     const movedY = this.y - oldY;
-    const isMoving = Math.abs(movedX) > 0.05 || Math.abs(movedY) > 0.05;
+    const actualDistMoved = Math.hypot(movedX, movedY);
+
+    // Перевірка на застрягання: якщо мав рухатися, але зсунувся менше ніж на 0.2px
+    if (dist > 8 && actualDistMoved < 0.2) {
+      this.stuckTimer = 0.35; // 0.35 секунди примусового ривка
+      // Вибираємо вільний напрямок для ривка
+      if (!boxHitsWallFn(this.x, this.y - 10, this.w, this.h)) { this.stuckDirX = 0; this.stuckDirY = -1; }
+      else if (!boxHitsWallFn(this.x, this.y + 10, this.w, this.h)) { this.stuckDirX = 0; this.stuckDirY = 1; }
+      else if (!boxHitsWallFn(this.x - 10, this.y, this.w, this.h)) { this.stuckDirX = -1; this.stuckDirY = 0; }
+      else { this.stuckDirX = 1; this.stuckDirY = 0; }
+    }
+
+    const isMoving = actualDistMoved > 0.05;
 
     if (isMoving) {
       const angle = Math.atan2(movedY, movedX);
@@ -176,24 +185,6 @@ class Bot {
     enemy.dir = this.dir;
     enemy.frame = this.frame;
     enemy.moving = isMoving;
-  }
-}
-
-export function tickBot(pickupsList, boxHitsWallFn, playerObj, dt) {
-  if (isPlayingWithBot && botInstance) {
-    botInstance.update(pickupsList, boxHitsWallFn, playerObj, dt);
-  }
-}
-
-export function respawnBot() {
-  if (botInstance) {
-    botInstance.x = GAME.width - 80;
-    botInstance.y = GAME.height - 80;
-    enemy.x = botInstance.x;
-    enemy.y = botInstance.y;
-  } else {
-    enemy.x = GAME.width - 80;
-    enemy.y = GAME.height - 80;
   }
 }
 
