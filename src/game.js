@@ -1,473 +1,833 @@
+// ══════════════════════════════════════════════════════════════
+//  GAME DOJO — підлаштуй стопу під чобіт
+// ══════════════════════════════════════════════════════════════
+//
+//  ПРАВИЛА РАУНДУ
+//  Праворуч показують чобіт. За кілька секунд він зникає, і далі
+//  гравець по памʼяті мне стопу пензлем, щоб вона повторила його форму.
+//  Коли час вийшов, чобіт накладається на стопу, і гра рахує,
+//  наскільки силуети збіглися. Понад поріг — очки й наступний чобіт.
+//
+//  ЯК ПРАЦЮЄ ДЕФОРМАЦІЯ, простими словами
+//  Оригінал ніколи не змінюється. Поруч живе «карта зміщень»: для
+//  кожної точки результату записано, з якого місця оригіналу брати
+//  колір. Спочатку там усюди нулі — картинка не змінена. Пензель
+//  править саме цю карту, а картинка збирається за нею наново.
+//  Через це якість не псується від сотні мазків, а «крок назад»
+//  миттєвий — треба лише повернути карту в попередній стан.
+//
+//  ЯК РАХУЄТЬСЯ ЗБІГ
+//  Беремо силует стопи й силует чобота, кожен вписуємо в однаковий
+//  квадрат (щоб не залежало від розміру й положення) і накладаємо.
+//  Відсоток = спільна площа / загальна площа. Це чесна міра
+//  «наскільки це та сама форма».
+//
+// ══════════════════════════════════════════════════════════════
+
 import { GAME } from './config.js';
 import { TUNING } from './tuning.js';
-import { enemy, sendMyMovement, tickBot, isPlayingWithBot, respawnBot } from './main.js';
 
 const T = TUNING;
-const TILE = T.field.tile; // 32px
 
-// ── Візуальний розмір персонажа на екрані ─────────────────────────────
-const DISPLAY_SIZE = 42; 
+// ── Інструмент ────────────────────────────────────────────────
+export const tool = { name: 'push' };
 
-// ── Розміри поля та відцентрилювання ──────────────────────────────────
-const COLS = 29; 
-const ROWS = 15; 
-const OFFSET_X = Math.floor((GAME.width - COLS * TILE) / 2);  
-const OFFSET_Y = Math.floor((GAME.height - ROWS * TILE) / 2); 
+// Опора. Значення беруться з tuning.js, але в режимі підбору
+// їх можна посунути мишкою просто в грі.
+const anchor = { x: T.anchor.x, y: T.anchor.y, radius: T.anchor.radius };
+let anchorHint = '';
 
-// ── Інпут (WASD / ЦФІВ / Стрілки) ────────────────────────────────────
-const keys = new Set();
-let spacePressed = false;
+// ── Полотно й буфери ──────────────────────────────────────────
+let canvas = null, ctx = null;
+let srcW = 0, srcH = 0;
+let srcData = null;                    // оригінал стопи, не змінюється
+let outImage = null, outData = null;   // результат деформації
+let buf = null, bufCtx = null;
+let dispX = null, dispY = null;        // карта зміщень
+let prevX = null, prevY = null;        // її копія на час одного мазка
+let imgX = 0, imgY = 0, imgScale = 1;
 
-addEventListener('keydown', (e) => {
-  const key = e.key.toLowerCase();
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'w', 'a', 's', 'd', 'ц', 'ф', 'і', 'в'].includes(key)) {
-    e.preventDefault();
-  }
-  if (e.key === ' ' && !e.repeat) spacePressed = true;
-  keys.add(key);
-});
+let failed = false, errorText = '';
+let needsWarp = true;
+let hooks = {};
 
-addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-addEventListener('blur', () => keys.clear());
+// ── Чоботи ────────────────────────────────────────────────────
+let boots = [];
+let bgImage = null;      // фон, якщо є
+let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
 
-const held = (...names) => names.some((n) => keys.has(n.toLowerCase()));
-
-// ── Поле ──────────────────────────────────────────────────────────────
-const LEVEL = [];
-for (let r = 0; r < ROWS; r++) {
-  const row = [];
-  for (let c = 0; c < COLS; c++) {
-    const isOuterWall = c === 0 || r === 0 || c === COLS - 1 || r === ROWS - 1;
-    const isPillar = (r % 3 === 0) && (c % 4 === 0);
-    row.push(isOuterWall || isPillar ? 1 : 0);
-  }
-  LEVEL.push(row);
-}
-
-function boxHitsWall(x, y, w, h) {
-  const relX0 = x - OFFSET_X;
-  const relY0 = y - OFFSET_Y;
-  const relX1 = x + w - 1 - OFFSET_X;
-  const relY1 = y + h - 1 - OFFSET_Y;
-
-  const c0 = Math.floor(relX0 / TILE);
-  const c1 = Math.floor(relX1 / TILE);
-  const r0 = Math.floor(relY0 / TILE);
-  const r1 = Math.floor(relY1 / TILE);
-
-  for (let r = r0; r <= r1; r++) {
-    for (let c = c0; c <= c1; c++) {
-      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || LEVEL[r]?.[c] === 1) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function moveAxis(entity, dx, dy) {
-  const nx = entity.x + dx;
-  const ny = entity.y + dy;
-  if (boxHitsWall(nx, ny, entity.w, entity.h)) return false;
-  entity.x = nx;
-  entity.y = ny;
-  return true;
-}
-
-// ── Спрайтова анімація ────────────────────────────────────────────────
-class SpriteSheet {
-  constructor(src, frameW, frameH) {
-    this.img = new Image();
-    this.img.src = src;
-    this.frameW = frameW;
-    this.frameH = frameH;
-    this.loaded = false;
-    this.img.onload = () => { this.loaded = true; };
-    this.img.onerror = () => { this.loaded = false; };
-  }
-  draw(ctx, frame, row, x, y, w, h) {
-    if (!this.loaded) return false;
-    ctx.drawImage(
-      this.img,
-      frame * this.frameW, row * this.frameH, this.frameW, this.frameH,
-      Math.round(x), Math.round(y), w, h
-    );
-    return true;
-  }
-}
-
-const heroSheet = new SpriteSheet('assets/hero.png', 70, 70);
-
-// ── Стан ──────────────────────────────────────────────────────────────
-const player = {
-  x: OFFSET_X + TILE * 1.5, 
-  y: OFFSET_Y + TILE * 1.5,
-  w: T.player.size, 
-  h: T.player.size,
-  speed: T.player.speed,
-  dir: 8,
-  frame: 0, 
-  frameTimer: 0, 
-  moving: false,
-  usedBombs: 0
+// ── Хід гри ───────────────────────────────────────────────────
+const game = {
+  phase: 'loading',   // loading | idle | play | result | done
+  round: 0,
+  score: 0,
+  t0: 0,
+  timeLeft: 0,
+  previewLeft: 0,
+  canEdit: false,
+  lastMatch: 0,
+  lastPassed: false,
+  lastPoints: 0,
 };
+let footBB = null;       // рамка видимої частини стопи, оновлюється при кожному збиранні
+let roundFrame = null;   // де лежить чобіт цього раунду — рахується раз і не змінюється
+let roundTarget = null;  // його силует на сітці порівняння
 
-const pickups = [];
-const bombs = [];
-const explosions = [];
+// ── Курсор ────────────────────────────────────────────────────
+let pointerInside = false, pointerX = 0, pointerY = 0;
+let drawing = false, lastBX = 0, lastBY = 0;
 
-function spawnPickup() {
-  const s = T.pickups.size;
-  for (let tries = 0; tries < 300; tries++) {
-    const c = Math.floor(Math.random() * (COLS - 2)) + 1;
-    const r = Math.floor(Math.random() * (ROWS - 2)) + 1;
-    if (LEVEL[r][c] === 0) {
-      const x = OFFSET_X + c * TILE + (TILE - s) / 2;
-      const y = OFFSET_Y + r * TILE + (TILE - s) / 2;
-      pickups.push({ x, y, w: s, h: s, t: 0 });
-      return;
+const undoStack = [];
+
+// ══════════════════════════════════════════════════════════════
+//  ЗАПУСК
+// ══════════════════════════════════════════════════════════════
+
+export function start(canvasEl, callbacks) {
+  hooks = callbacks || {};
+  canvas = canvasEl;
+  if (!canvas) { console.error('Немає <canvas id="stage"> у index.html'); return; }
+
+  canvas.width = GAME.width;
+  canvas.height = GAME.height;
+  ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  requestAnimationFrame(frame);
+
+  try { bindPointer(); } catch (e) { return fail('Помилка запуску: ' + e.message); }
+
+  if (T.background.show) {
+    loadImage(T.background.src)
+      .then((im) => { bgImage = im; })
+      .catch((e) => console.warn('Фон не завантажився:', e.message));
+  }
+
+  const list = [T.image.src].concat(T.boots.map((b) => b.src));
+  Promise.all(list.map(loadImage))
+    .then((imgs) => {
+      setupFoot(imgs[0]);
+      boots = T.boots.map((def, i) => prepBoot(def, imgs[i + 1]));
+      reportBaselines();
+      game.phase = 'idle';
+      notify();
+    })
+    .catch((e) => fail(e.message));
+}
+
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error('Не знайдено файл ' + src));
+    setTimeout(() => rej(new Error('Картинка ' + src + ' не завантажується')), 15000);
+    im.src = src;
+  });
+}
+
+// Скільки відсотків збігу дає стопа, якої взагалі не торкались.
+// Це нижня межа: ставити поріг нижче за неї безглуздо — раунд
+// зараховуватиметься тому, хто нічого не робив.
+function reportBaselines() {
+  ensureWarp();
+  const base = footGrid();
+  const lines = boots.map((b) =>
+    `  ${b.name}: без жодного руху ${overlapPercent(base, bootGrid(b, frameFor(b))).toFixed(1)}%, поріг ${b.pass}%`);
+  console.log('Game Dojo — баланс порогів:\n' + lines.join('\n'));
+}
+
+function fail(message) {
+  failed = true;
+  errorText = message;
+  console.error('Game Dojo:', message);
+  hooks.onError?.(message);
+}
+
+function setupFoot(img) {
+  const maxSide = Math.max(200, T.image.workResolution);
+  const k = maxSide / Math.max(img.width, img.height);
+  srcW = Math.max(2, Math.round(img.width * k));
+  srcH = Math.max(2, Math.round(img.height * k));
+
+  const tmp = document.createElement('canvas');
+  tmp.width = srcW; tmp.height = srcH;
+  const tc = tmp.getContext('2d', { willReadFrequently: true });
+  tc.imageSmoothingEnabled = true;
+  tc.imageSmoothingQuality = 'high';
+  tc.drawImage(img, 0, 0, srcW, srcH);
+  srcData = tc.getImageData(0, 0, srcW, srcH).data;
+
+  buf = document.createElement('canvas');
+  buf.width = srcW; buf.height = srcH;
+  bufCtx = buf.getContext('2d');
+  outImage = bufCtx.createImageData(srcW, srcH);
+  outData = outImage.data;
+
+  const n = srcW * srcH;
+  dispX = new Float32Array(n); dispY = new Float32Array(n);
+  prevX = new Float32Array(n); prevY = new Float32Array(n);
+
+  imgScale = 1; imgX = 0; imgY = 0;
+  warp();                 // перше збирання дає рамку незімʼятої стопи
+  baseBB = footBB;
+  layout();
+}
+
+// Чобіт: зменшена копія для порівняння + готовий нормалізований силует
+function prepBoot(def, img) {
+  const maxSide = 420;
+  const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const w = Math.max(2, Math.round(img.width * k));
+  const h = Math.max(2, Math.round(img.height * k));
+
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tc = tmp.getContext('2d', { willReadFrequently: true });
+  tc.drawImage(img, 0, 0, w, h);
+  const mask = maskFrom(tc.getImageData(0, 0, w, h).data, w, h);
+  const bb = bboxOf(mask, w, h);
+  const back = img.width / w; // з координат маски назад у пікселі картинки
+
+  return {
+    name: def.name || '',
+    pass: typeof def.passPercent === 'number' ? def.passPercent : T.round.passPercent,
+    img,
+    shape: makeSilhouette(img, T.colors.overlay),   // для накладання на стопу
+    mask, mw: w, mh: h,
+    bbox: bb && { cx: bb.cx * back, cy: bb.cy * back, w: bb.w * back, h: bb.h * back },
+  };
+}
+
+// Перефарбовуємо картинку в суцільний колір, лишаючи тільки її форму.
+// Потрібно, бо чорний чобіт на темному тлі просто не видно.
+function makeSilhouette(img, color) {
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = color;
+  g.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+// Стопа має стояти підошвою на пʼєдесталі, тож рахуємо все від
+// рамки самої стопи, ігноруючи прозорі поля навколо неї.
+function layout() {
+  const I = T.image;
+  const bb = baseBB || { h: srcH, cx: srcW / 2, y1: srcH - 1 };
+  imgScale = (GAME.height * I.heightPercent) / bb.h;
+  imgX = Math.round(GAME.width * I.standX - bb.cx * imgScale);
+  imgY = Math.round(GAME.height * I.standY - (bb.y1 + 1) * imgScale);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  СИЛУЕТИ І ПОРІВНЯННЯ ФОРМ
+// ══════════════════════════════════════════════════════════════
+
+// Що вважаємо «тілом» картинки: непрозоре і не біле
+function maskFrom(data, W, H) {
+  const m = new Uint8Array(W * H);
+  for (let i = 0, n = W * H; i < n; i++) {
+    const o = i << 2;
+    if (data[o + 3] < 128) continue;
+    if (data[o] > 245 && data[o + 1] > 245 && data[o + 2] > 245) continue;
+    m[i] = 1;
+  }
+  return m;
+}
+
+function bboxOf(mask, W, H) {
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) {
+    const row = y * W;
+    for (let x = 0; x < W; x++) {
+      if (!mask[row + x]) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
     }
   }
-}
-for (let i = 0; i < T.pickups.count; i++) spawnPickup();
-
-const state = { score: 0, time: 0, running: true };
-
-export function placeBomb(ownerX, ownerY, scoreVal, usedBombsCounter) {
-  const available = Math.floor(scoreVal / 25) - usedBombsCounter;
-  if (available > 0) {
-    bombs.push({
-      x: ownerX + T.player.size / 2,
-      y: ownerY + T.player.size / 2,
-      timer: 3.0,
-      radius: 70
-    });
-    return true;
-  }
-  return false;
+  if (x1 < 0) return null;
+  return { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1,
+           cx: (x0 + x1 + 1) / 2, cy: (y0 + y1 + 1) / 2 };
 }
 
-// ── Оновлення ─────────────────────────────────────────────────────────
-function update(dt) {
-  if (!state.running) return;
-  state.time += dt;
+// Куди саме лягає чобіт на початку раунду. Рахуємо ОДИН раз, поки
+// стопа ще не зім'ята, і далі не чіпаємо: інакше чобіт їздив би
+// за стопою, і гравцеві не було б до чого підлаштовуватись.
+function frameFor(boot) {
+  if (!footBB || !boot.bbox) return null;
+  const k = Math.max(footBB.w, footBB.h) / Math.max(boot.bbox.w, boot.bbox.h);
+  return { k, dx: footBB.cx - boot.bbox.cx * k, dy: footBB.cy - boot.bbox.cy * k };
+}
 
-  let dx = 0, dy = 0;
-  if (held('arrowleft', 'a', 'ф')) dx -= 1;
-  if (held('arrowright', 'd', 'в')) dx += 1;
-  if (held('arrowup', 'w', 'ц')) dy -= 1;
-  if (held('arrowdown', 's', 'і')) dy += 1;
-
-  player.moving = dx !== 0 || dy !== 0;
-
-  if (dx > 0 && dy === 0)       player.dir = 0;
-  else if (dx > 0 && dy > 0)   player.dir = 1;
-  else if (dx === 0 && dy > 0)  player.dir = 2;
-  else if (dx < 0 && dy > 0)   player.dir = 3;
-  else if (dx < 0 && dy === 0)  player.dir = 4;
-  else if (dx < 0 && dy < 0)   player.dir = 5;
-  else if (dx === 0 && dy < 0)  player.dir = 6;
-  else if (dx > 0 && dy < 0)   player.dir = 7;
-  else if (!player.moving)     player.dir = 8;
-
-  if (dx && dy) { const k = Math.SQRT1_2; dx *= k; dy *= k; }
-
-  moveAxis(player, dx * player.speed * dt, 0);
-  moveAxis(player, 0, dy * player.speed * dt);
-
-  if (spacePressed) {
-    if (placeBomb(player.x, player.y, state.score, player.usedBombs)) {
-      player.usedBombs++;
+// Силует стопи на сітці, натягнутій на весь буфер.
+// Сітка нерухома, тому зсув і розмір стопи тепер теж мають значення.
+function footGrid() {
+  const G = T.compare.gridSize;
+  const out = new Uint8Array(G * G);
+  for (let j = 0; j < G; j++) {
+    const y = Math.min(srcH - 1, Math.floor((j + 0.5) / G * srcH));
+    for (let i = 0; i < G; i++) {
+      const x = Math.min(srcW - 1, Math.floor((i + 0.5) / G * srcW));
+      out[j * G + i] = outData[((y * srcW + x) << 2) + 3] >= 128 ? 1 : 0;
     }
-    spacePressed = false;
+  }
+  return out;
+}
+
+// Силует чобота на тій самій сітці, покладений за рамкою раунду
+function bootGrid(boot, fr) {
+  const G = T.compare.gridSize;
+  const out = new Uint8Array(G * G);
+  if (!fr) return out;
+  const sx = boot.mw / boot.img.width, sy = boot.mh / boot.img.height;
+  for (let j = 0; j < G; j++) {
+    const my = Math.round(((( j + 0.5) / G * srcH - fr.dy) / fr.k) * sy);
+    if (my < 0 || my >= boot.mh) continue;
+    for (let i = 0; i < G; i++) {
+      const mx = Math.round((((i + 0.5) / G * srcW - fr.dx) / fr.k) * sx);
+      if (mx < 0 || mx >= boot.mw) continue;
+      out[j * G + i] = boot.mask[my * boot.mw + mx];
+    }
+  }
+  return out;
+}
+
+// Спільна площа поділена на загальну
+function overlapPercent(a, b) {
+  if (!a || !b) return 0;
+  let inter = 0, uni = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    if (x && y) inter++;
+    if (x || y) uni++;
+  }
+  return uni ? (inter / uni) * 100 : 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  МИША
+// ══════════════════════════════════════════════════════════════
+
+function toCanvas(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (GAME.width / r.width),
+           y: (e.clientY - r.top) * (GAME.height / r.height) };
+}
+function toImage(p) { return { x: (p.x - imgX) / imgScale, y: (p.y - imgY) / imgScale }; }
+
+function bindPointer() {
+  canvas.addEventListener('pointerenter', () => { pointerInside = true; });
+  canvas.addEventListener('pointerleave', () => { if (!drawing) pointerInside = false; });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (T.anchor.pickWithAlt && e.altKey) { moveAnchor(e); return; }
+    if (!game.canEdit) return;
+    canvas.setPointerCapture(e.pointerId);
+    const p = toCanvas(e);
+    pointerX = p.x; pointerY = p.y; pointerInside = true;
+    const b = toImage(p);
+    lastBX = b.x; lastBY = b.y;
+    drawing = true;
+    pushUndo();
+    stamp(b.x, b.y, 0, 0);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const p = toCanvas(e);
+    pointerX = p.x; pointerY = p.y;
+    if (!drawing || !game.canEdit) return;
+    const b = toImage(p);
+    strokeTo(b.x, b.y);
+  });
+
+  const finish = (e) => {
+    if (!drawing) return;
+    drawing = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
+
+  canvas.addEventListener('wheel', (e) => {
+    if (!T.anchor.pickWithAlt || !e.altKey) return;
+    e.preventDefault();
+    anchor.radius = Math.max(0.01, Math.min(0.6,
+      anchor.radius * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+    printAnchor();
+  }, { passive: false });
+}
+
+// Режим підбору опори: показуємо готовий рядок для tuning.js
+function moveAnchor(e) {
+  const b = toImage(toCanvas(e));
+  anchor.x = Math.max(0, Math.min(1, b.x / srcW));
+  anchor.y = Math.max(0, Math.min(1, b.y / srcH));
+  printAnchor();
+}
+
+function printAnchor() {
+  const r = (v) => v.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  anchorHint = `anchor: { x: ${r(anchor.x)}, y: ${r(anchor.y)}, radius: ${r(anchor.radius)} }`;
+  console.log('Опора — скопіюй у tuning.js:  ' + anchorHint);
+}
+
+function strokeTo(bx, by) {
+  const R = radiusInImage();
+  const dx = bx - lastBX, dy = by - lastBY;
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.min(64, Math.ceil(dist / Math.max(1, R * 0.18))));
+  for (let i = 1; i <= steps; i++) {
+    const t0 = (i - 1) / steps, t1 = i / steps;
+    stamp(lastBX + dx * t1, lastBY + dy * t1, dx * (t1 - t0), dy * (t1 - t0));
+  }
+  lastBX = bx; lastBY = by;
+}
+
+function radiusInImage() { return (T.brush.size / 2) / imgScale; }
+
+// ══════════════════════════════════════════════════════════════
+//  ПЕНЗЕЛЬ
+// ══════════════════════════════════════════════════════════════
+//
+//  Нова карта в точці p = стара карта в точці (p − d), мінус d,
+//  де d — на скільки має зсунутись вміст саме тут.
+//  Другий доданок зсуває, перший тягне за собою те, що вже було
+//  наліплено раніше — саме тому мазки складаються природно.
+
+function stamp(cx, cy, mvx, mvy) {
+  const R = radiusInImage();
+  if (R < 0.5) return;
+
+  const pad = Math.ceil(R) + 2;
+  const x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(srcW - 1, Math.ceil(cx + R));
+  const y0 = Math.max(0, Math.floor(cy - R)), y1 = Math.min(srcH - 1, Math.ceil(cy + R));
+  if (x1 < x0 || y1 < y0) return;
+
+  const cy0 = Math.max(0, y0 - pad), cy1 = Math.min(srcH - 1, y1 + pad);
+  const cx0 = Math.max(0, x0 - pad), cx1 = Math.min(srcW - 1, x1 + pad);
+  for (let y = cy0; y <= cy1; y++) {
+    const a = y * srcW + cx0, b = y * srcW + cx1 + 1;
+    prevX.set(dispX.subarray(a, b), a);
+    prevY.set(dispY.subarray(a, b), a);
   }
 
-  if (player.moving) {
-    sendMyMovement(player.x, player.y, player.dir, player.frame);
-  }
+  const R2 = R * R;
+  const expo = 1 + (1 - clamp01(T.brush.hardness)) * 3;
+  const s = clamp01(T.brush.strength);
+  const heal = T.brush.restoreRate * s;
+  const isRestore = tool.name === 'restore';
 
-  tickBot(pickups, boxHitsWall, player, dt);
+  // Опорна точка: чим ближче до неї, тим слабший пензель, у центрі — нуль
+  const ax = anchor.x * srcW, ay = anchor.y * srcH;
+  const ar = anchor.radius * Math.max(srcW, srcH);
+  const ar2 = ar * ar;
 
-  player.frameTimer += dt;
-  const animSpeed = player.moving ? T.player.animationSpeed : (T.player.animationSpeed / 2);
-  if (player.frameTimer > 1 / animSpeed) {
-    player.frameTimer = 0;
-    player.frame = (player.frame + 1) % 7;
-  }
+  for (let y = y0; y <= y1; y++) {
+    const vy = y - cy;
+    for (let x = x0; x <= x1; x++) {
+      const vx = x - cx;
+      const r2 = vx * vx + vy * vy;
+      if (r2 >= R2) continue;
 
-  // Бомби
-  for (let i = bombs.length - 1; i >= 0; i--) {
-    const b = bombs[i];
-    b.timer -= dt;
+      let w = Math.pow(1 - r2 / R2, expo);
 
-    if (b.timer <= 0) {
-      explosions.push({ x: b.x, y: b.y, radius: b.radius, timer: 0.3 });
+      const adx = x - ax, ady = y - ay;
+      const ad2 = adx * adx + ady * ady;
+      if (ad2 < ar2) {
+        const k = Math.sqrt(ad2) / ar;       // 0 у центрі опори, 1 на її краю
+        w *= k * k * (3 - 2 * k);            // плавний перехід
+      }
+      if (w < 0.0008) continue;
 
-      const playerDist = Math.hypot((player.x + player.w / 2) - b.x, (player.y + player.h / 2) - b.y);
-      if (playerDist <= b.radius) {
-        player.x = OFFSET_X + TILE * 1.5;
-        player.y = OFFSET_Y + TILE * 1.5;
-        state.score = Math.max(0, state.score - 50);
-        onScoreChange?.(state.score);
+      const i = y * srcW + x;
+
+      if (isRestore) {
+        const keep = 1 - heal * w;
+        dispX[i] = prevX[i] * keep;
+        dispY[i] = prevY[i] * keep;
+        continue;
       }
 
-      if (enemy) {
-        const enemyW = enemy.w || T.player.size;
-        const enemyH = enemy.h || T.player.size;
-        const enemyDist = Math.hypot((enemy.x + enemyW / 2) - b.x, (enemy.y + enemyH / 2) - b.y);
+      const dx = mvx * s * w, dy = mvy * s * w;
+      if (dx === 0 && dy === 0) continue;
 
-        if (enemyDist <= b.radius) {
-          respawnBot();
-          if (enemy.score !== undefined) {
-            enemy.score = Math.max(0, enemy.score - 50);
-          }
+      dispX[i] = sampleDisp(prevX, x - dx, y - dy) - dx;
+      dispY[i] = sampleDisp(prevY, x - dx, y - dy) - dy;
+    }
+  }
+  needsWarp = true;
+}
+
+function sampleDisp(arr, x, y) {
+  if (x < 0) x = 0; else if (x > srcW - 1) x = srcW - 1;
+  if (y < 0) y = 0; else if (y > srcH - 1) y = srcH - 1;
+  const x0 = x | 0, y0 = y | 0;
+  const x1 = x0 + 1 < srcW ? x0 + 1 : x0;
+  const y1 = y0 + 1 < srcH ? y0 + 1 : y0;
+  const fx = x - x0, fy = y - y0;
+  const a = arr[y0 * srcW + x0], b = arr[y0 * srcW + x1];
+  const c = arr[y1 * srcW + x0], d = arr[y1 * srcW + x1];
+  const top = a + (b - a) * fx, bot = c + (d - c) * fx;
+  return top + (bot - top) * fy;
+}
+
+function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+// ══════════════════════════════════════════════════════════════
+//  ЗБИРАННЯ КАРТИНКИ
+// ══════════════════════════════════════════════════════════════
+
+function warp() {
+  const W = srcW, H = srcH, src = srcData, out = outData;
+  const maxX = W - 1, maxY = H - 1;
+  let bx0 = W, by0 = H, bx1 = -1, by1 = -1;   // рамка видимої частини стопи
+
+  for (let y = 0; y < H; y++) {
+    const row = y * W;
+    for (let x = 0; x < W; x++) {
+      const i = row + x, o = i << 2;
+      const ox = dispX[i], oy = dispY[i];
+
+      if (ox === 0 && oy === 0) {                     // недоторкана точка
+        out[o] = src[o]; out[o + 1] = src[o + 1];
+        out[o + 2] = src[o + 2]; out[o + 3] = src[o + 3];
+        if (out[o + 3] >= 128) {
+          if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+          if (y < by0) by0 = y; if (y > by1) by1 = y;
         }
+        continue;
       }
 
-      for (let j = pickups.length - 1; j >= 0; j--) {
-        const p = pickups[j];
-        if (Math.hypot((p.x + p.w / 2) - b.x, (p.y + p.h / 2) - b.y) <= b.radius) {
-          pickups.splice(j, 1);
-          spawnPickup();
-        }
+      let sx = x + ox, sy = y + oy;
+      if (sx < 0) sx = 0; else if (sx > maxX) sx = maxX;
+      if (sy < 0) sy = 0; else if (sy > maxY) sy = maxY;
+
+      const x0 = sx | 0, y0 = sy | 0;
+      const x1 = x0 < maxX ? x0 + 1 : x0, y1 = y0 < maxY ? y0 + 1 : y0;
+      const fx = sx - x0, fy = sy - y0;
+      const iA = (y0 * W + x0) << 2, iB = (y0 * W + x1) << 2;
+      const iC = (y1 * W + x0) << 2, iD = (y1 * W + x1) << 2;
+
+      for (let c = 0; c < 4; c++) {
+        const top = src[iA + c] + (src[iB + c] - src[iA + c]) * fx;
+        const bot = src[iC + c] + (src[iD + c] - src[iC + c]) * fx;
+        out[o + c] = top + (bot - top) * fy;
       }
-
-      bombs.splice(i, 1);
-    }
-  }
-
-  for (let i = explosions.length - 1; i >= 0; i--) {
-    const exp = explosions[i];
-    exp.timer -= dt;
-    if (exp.timer <= 0) explosions.splice(i, 1);
-  }
-
-  // Монетки
-  for (let i = pickups.length - 1; i >= 0; i--) {
-    const p = pickups[i];
-    p.t += dt;
-
-    const hitPlayer =
-      player.x < p.x + p.w && player.x + player.w > p.x &&
-      player.y < p.y + p.h && player.y + player.h > p.y;
-
-    if (hitPlayer) {
-      pickups.splice(i, 1);
-      state.score += T.pickups.scoreValue;
-      spawnPickup();
-      onScoreChange?.(state.score);
-      continue;
-    }
-
-    if (enemy) {
-      const eW = enemy.w || T.player.size;
-      const eH = enemy.h || T.player.size;
-      const hitEnemy =
-        enemy.x < p.x + p.w && enemy.x + eW > p.x &&
-        enemy.y < p.y + p.h && enemy.y + eH > p.y;
-
-      if (hitEnemy) {
-        pickups.splice(i, 1);
-        if (enemy.score !== undefined) enemy.score += T.pickups.scoreValue;
-        spawnPickup();
+      if (out[o + 3] >= 128) {
+        if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+        if (y < by0) by0 = y; if (y > by1) by1 = y;
       }
     }
   }
+  footBB = bx1 < 0 ? null : { x0: bx0, y0: by0, x1: bx1, y1: by1,
+    w: bx1 - bx0 + 1, h: by1 - by0 + 1,
+    cx: (bx0 + bx1 + 1) / 2, cy: (by0 + by1 + 1) / 2 };
+
+  bufCtx.putImageData(outImage, 0, 0);
+  needsWarp = false;
 }
 
-// ── Малювання ─────────────────────────────────────────────────────────
-function drawMap(ctx, isLit = false) {
-  const L = T.light;
+function ensureWarp() { if (needsWarp) warp(); }
 
-  // Підлога: у промені світла одна, у темряві інша
-  ctx.fillStyle = isLit ? L.litFloor : L.darkFloor;
+// ══════════════════════════════════════════════════════════════
+//  ХІД ГРИ
+// ══════════════════════════════════════════════════════════════
+
+function beginRound(i) {
+  game.round = i;
+  dispX.fill(0); dispY.fill(0);
+  undoStack.length = 0;
+  needsWarp = true;
+  ensureWarp();                       // щоб рамка стопи була від НЕЗІМʼЯТОЇ стопи
+  roundFrame = frameFor(boots[i]);
+  roundTarget = bootGrid(boots[i], roundFrame);
+  game.t0 = performance.now();
+  game.phase = 'play';
+  notify();
+}
+
+function finishRound() {
+  ensureWarp();
+  const boot = boots[game.round];
+  game.lastMatch = overlapPercent(footGrid(), roundTarget);
+  game.lastPassed = game.lastMatch >= boot.pass;
+  game.lastPoints = game.lastPassed
+    ? Math.round(game.lastMatch * T.round.pointsPerPercent) : 0;
+  game.score += game.lastPoints;
+
+  game.phase = 'result';
+  game.canEdit = false;
+  notify();
+}
+
+// Одна кнопка на всі випадки — робить те, що доречно зараз
+export function action() {
+  if (game.phase === 'idle') return beginRound(0);
+  if (game.phase === 'done') { game.score = 0; return beginRound(0); }
+  if (game.phase !== 'result') return;
+
+  if (!game.lastPassed) return beginRound(game.round);       // той самий чобіт
+  if (game.round + 1 < boots.length) return beginRound(game.round + 1);
+  game.phase = 'done';
+  notify();
+}
+
+function updateTimers(now) {
+  if (game.phase !== 'play') { game.canEdit = false; return; }
+  const R = T.round;
+  const el = (now - game.t0) / 1000;
+
+  if (R.timerStartsAfterPreview) {
+    game.previewLeft = Math.max(0, R.previewSeconds - el);
+    game.canEdit = game.previewLeft <= 0;
+    game.timeLeft = game.canEdit
+      ? Math.max(0, R.totalSeconds - (el - R.previewSeconds))
+      : R.totalSeconds;
+  } else {
+    game.previewLeft = Math.max(0, R.previewSeconds - el);
+    game.canEdit = true;
+    game.timeLeft = Math.max(0, R.totalSeconds - el);
+  }
+
+  if (game.canEdit && game.timeLeft <= 0) finishRound();
+}
+
+function notify() { hooks.onUpdate?.(getState()); }
+
+export function getState() {
+  return {
+    phase: game.phase,
+    round: game.round,
+    total: boots.length,
+    bootName: boots[game.round]?.name || '',
+    timeLeft: game.timeLeft,
+    previewLeft: game.previewLeft,
+    bootVisible: game.phase === 'play' && game.previewLeft > 0,
+    match: game.lastMatch,
+    passed: game.lastPassed,
+    points: game.lastPoints,
+    score: game.score,
+    canEdit: game.canEdit,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+//  МАЛЮВАННЯ
+// ══════════════════════════════════════════════════════════════
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const wasEdit = game.canEdit, wasPhase = game.phase;
+  updateTimers(now || performance.now());
+  if (wasEdit !== game.canEdit || wasPhase !== game.phase) notify();
+
+  ctx.fillStyle = T.colors.stage;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
+  if (bgImage) ctx.drawImage(bgImage, 0, 0, GAME.width, GAME.height);
 
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (LEVEL[r][c] !== 1) continue;
-      const wx = OFFSET_X + c * TILE;
-      const wy = OFFSET_Y + r * TILE;
+  if (failed) return drawFail();
+  if (game.phase === 'loading') return drawCentered('Завантаження…', T.colors.dim, 30);
 
-      // Стіни у світлі яскраві, поза ним — ледь помітні силуети
-      ctx.fillStyle = isLit ? L.litWall : L.darkWall;
-      ctx.fillRect(wx, wy, TILE, TILE);
-      ctx.fillStyle = isLit ? L.litWallTop : L.darkWallTop;
-      ctx.fillRect(wx, wy, TILE, 3);
-    }
+  ensureWarp();
+  drawShadow();
+  ctx.drawImage(buf, imgX, imgY, srcW * imgScale, srcH * imgScale);
+
+  if (T.anchor.show && game.phase !== 'done') drawAnchor();
+  if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
+  if (game.phase === 'result') drawResult();
+  if (game.phase === 'idle') drawIdle();
+  if (game.phase === 'done') drawDone();
+  if (game.phase === 'play') drawPlayHud();
+  if (game.canEdit && pointerInside) drawBrush();
+
+  if (T.anchor.pickWithAlt) {
+    text(anchorHint || 'Alt + клік — пересунути опору, Alt + колесо — радіус',
+         40, GAME.height - 34, anchorHint ? T.colors.good : T.colors.dim, 22);
   }
 }
 
-function constructFlashlightPath(ctx, px, py, dirIndex, lightRadius = T.light.radius, coneAngle = Math.PI / T.light.coneWidth) {
-  const angles = [
-    0,                  // 0: [→]
-    Math.PI / 4,        // 1: [↘]
-    Math.PI / 2,        // 2: [↓]
-    (3 * Math.PI) / 4,  // 3: [↙]
-    Math.PI,            // 4: [←]
-    -(3 * Math.PI) / 4, // 5: [↖]
-    -Math.PI / 2,       // 6: [↑]
-    -Math.PI / 4,       // 7: [↗]
-    Math.PI / 2         // 8: [•]
-  ];
+// Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
+function drawShadow() {
+  const I = T.image;
+  if (!I.shadow || !footBB) return;
+  const cx = imgX + footBB.cx * imgScale;
+  const cy = imgY + (footBB.y1 + 1) * imgScale;
+  const rx = footBB.w * imgScale * I.shadowWidth;
+  const ry = footBB.h * imgScale * I.shadowHeight;
 
-  const angle = angles[dirIndex !== undefined ? dirIndex : 8];
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
+  g.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
-  // Аура навколо
-  ctx.arc(px, py, T.light.auraRadius, 0, Math.PI * 2);
-  
-  // Конус
-  ctx.moveTo(px, py);
-  ctx.arc(px, py, lightRadius, angle - coneAngle / 2, angle + coneAngle / 2);
-  ctx.closePath();
-}
-
-function render(ctx) {
-  // КРОК 1. Малюємо базову темну карту
-  drawMap(ctx, false);
-
-  // КРОК 2. Малюємо ЯСКРАВУ карту тільки там, куди світять ліхтарики
   ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, ry / Math.max(rx, ry));
+  ctx.translate(-cx, -cy);
+  ctx.fillStyle = g;
   ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(rx, ry), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
-  const pCenterX = player.x + player.w / 2;
-  const pCenterY = player.y + player.h / 2;
-  constructFlashlightPath(ctx, pCenterX, pCenterY, player.dir, T.light.radius);
+// Текст поверх фону читається гірше, тому даємо йому темну підкладку
+function textShade(y, h) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(8, 7, 12, 0.75)');
+  g.addColorStop(1, 'rgba(8, 7, 12, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, y, GAME.width, h);
+}
 
-  if (enemy) {
-    const eW = enemy.w || T.player.size;
-    const eH = enemy.h || T.player.size;
-    const eCenterX = enemy.x + eW / 2;
-    const eCenterY = enemy.y + eH / 2;
-    constructFlashlightPath(ctx, eCenterX, eCenterY, enemy.dir, T.light.enemyRadius);
-  }
+function text(str, x, y, color, size, align, weight) {
+  ctx.fillStyle = color;
+  ctx.font = (weight || '') + ' ' + size + 'px ui-monospace, Menlo, Consolas, monospace';
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(str, x, y);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
 
-  // Обрізаємо зону рендеру суворо за конусами світла
-  ctx.clip();
+function drawCentered(str, color, size) {
+  text(str, GAME.width / 2, GAME.height / 2, color, size, 'center');
+}
 
-  // Малюємо яскраве поле та стіни у світлі
-  drawMap(ctx, true);
+function drawFail() {
+  text('Щось пішло не так', GAME.width / 2, GAME.height / 2 - 50, T.colors.bad, 46, 'center', 'bold');
+  text(errorText, GAME.width / 2, GAME.height / 2 + 20, T.colors.ink, 30, 'center');
+  text('Подробиці: F12 → вкладка Console', GAME.width / 2, GAME.height / 2 + 80, T.colors.dim, 24, 'center');
+}
 
-  // М'який ефект світіння ліхтаря
-  const rgb = T.light.color;
-  const beamGrad = ctx.createRadialGradient(pCenterX, pCenterY, 10, pCenterX, pCenterY, T.light.radius);
-  beamGrad.addColorStop(0,   `rgba(${rgb}, ${T.light.strength})`);
-  beamGrad.addColorStop(0.7, `rgba(${rgb}, ${T.light.strength * 0.35})`);
-  beamGrad.addColorStop(1,   `rgba(${rgb}, 0)`);
-  ctx.fillStyle = beamGrad;
-  ctx.fillRect(0, 0, GAME.width, GAME.height);
+function drawAnchor() {
+  const x = imgX + anchor.x * srcW * imgScale;
+  const y = imgY + anchor.y * srcH * imgScale;
+  const r = anchor.radius * Math.max(srcW, srcH) * imgScale;
 
+  ctx.save();
+  ctx.strokeStyle = T.anchor.color;
+  ctx.globalAlpha = 0.35;
+  ctx.setLineDash([10, 10]);
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 
-  // КРОК 3. Малюємо ігрові об'єкти поверх усього
-  // 1. Монетки
-  for (const p of pickups) {
-    const bob = Math.sin(p.t * T.pickups.bobSpeed) * T.pickups.bobHeight;
-    ctx.fillStyle = T.colors.pickup;
-    ctx.fillRect(p.x, p.y + bob, p.w, p.h);
-  }
-
-  // 2. Бомби
-  for (const b of bombs) {
-    const blink = Math.sin(b.timer * 20) > 0;
-    ctx.fillStyle = blink ? '#ff4444' : '#111111';
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffaa00';
-    ctx.fillRect(b.x - 1, b.y - 14, 2, 5);
-  }
-
-  // 3. Вибухи
-  for (const exp of explosions) {
-    ctx.fillStyle = 'rgba(255, 100, 0, 0.5)';
-    ctx.beginPath();
-    ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffcc00';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  }
-
-  const offsetX = (DISPLAY_SIZE - player.w) / 2;
-  const offsetY = (DISPLAY_SIZE - player.h) / 2;
-
-  // 4. Гравець
-  const drew = heroSheet.draw(
-    ctx, 
-    player.frame, 
-    player.dir, 
-    player.x - offsetX, 
-    player.y - offsetY, 
-    DISPLAY_SIZE, 
-    DISPLAY_SIZE
-  );
-
-  if (!drew) {
-    ctx.fillStyle = T.colors.player;
-    ctx.fillRect(Math.round(player.x), Math.round(player.y), player.w, player.h);
-  }
-
-  // 5. Супротивник / Бот
-  if (enemy) {
-    const eW = enemy.w || T.player.size;
-    const eH = enemy.h || T.player.size;
-    const enemyOffsetX = (DISPLAY_SIZE - eW) / 2;
-    const enemyOffsetY = (DISPLAY_SIZE - eH) / 2;
-
-    const drewEnemy = heroSheet.draw(
-      ctx,
-      enemy.frame || 0,
-      enemy.dir !== undefined ? enemy.dir : 8,
-      enemy.x - enemyOffsetX,
-      enemy.y - enemyOffsetY,
-      DISPLAY_SIZE,
-      DISPLAY_SIZE
-    );
-
-    if (!drewEnemy) {
-      ctx.fillStyle = T.colors.enemy || '#ff595e';
-      ctx.fillRect(Math.round(enemy.x), Math.round(enemy.y), eW, eH);
-    }
-  }
-
-  // 6. Інтерфейс
-  const availableBombs = Math.max(0, Math.floor(state.score / 25) - player.usedBombs);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '14px monospace';
-  ctx.fillText(`Бомби [Space]: ${availableBombs} (наступна через ${25 - (state.score % 25)} очок)`, 15, 25);
+  ctx.fillStyle = T.anchor.color;
+  ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+  text('опора', x, y - 26, T.anchor.color, 20, 'center');
 }
 
-// ── Цикл ──────────────────────────────────────────────────────────────
-let onScoreChange = null;
-export function setScoreListener(fn) { onScoreChange = fn; }
-export function getState() { return state; }
-export function resetGame() {
-  state.score = 0; state.time = 0; state.running = true;
-  player.x = OFFSET_X + TILE * 1.5; 
-  player.y = OFFSET_Y + TILE * 1.5;
-  player.usedBombs = 0;
-  pickups.length = 0;
-  bombs.length = 0;
-  explosions.length = 0;
-  for (let i = 0; i < T.pickups.count; i++) spawnPickup();
-  onScoreChange?.(0);
+// Кладемо чобіт просто на стопу: обидві форми вписані в один квадрат,
+// рівно так само, як їх потім порівнює підрахунок.
+function drawBootOnFoot(picture, boot, alpha) {
+  const fr = roundFrame;
+  if (!fr || alpha <= 0.001) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(picture,
+    imgX + fr.dx * imgScale, imgY + fr.dy * imgScale,
+    boot.img.width * fr.k * imgScale, boot.img.height * fr.k * imgScale);
+  ctx.restore();
 }
 
-export function start(canvas) {
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
+// Місце праворуч, де пишемо результат раунду
+function sideX() { return GAME.width * 0.84; }
 
-  const STEP = 1 / 60;
-  let acc = 0;
-  let last = performance.now();
+function drawBootPreview() {
+  const P = T.preview, R = T.round;
+  const shown = R.previewSeconds - game.previewLeft;   // скільки вже показуємо
 
-  function frame(now) {
-    acc += Math.min((now - last) / 1000, 0.25);
-    last = now;
-    while (acc >= STEP) { update(STEP); acc -= STEP; }
-    render(ctx);
-    requestAnimationFrame(frame);
+  // Плавно проявляємо на початку і так само плавно гасимо в кінці
+  let a = 1;
+  if (P.fadeInSeconds > 0) a = Math.min(a, shown / P.fadeInSeconds);
+  if (P.fadeOutSeconds > 0) a = Math.min(a, game.previewLeft / P.fadeOutSeconds);
+  a = Math.max(0, Math.min(1, a)) * P.alpha;
+
+  drawBootOnFoot(boots[game.round].img, boots[game.round], a);
+}
+
+function drawPlayHud() {
+  textShade(0, 150);
+  const boot = boots[game.round];
+  text('Раунд ' + (game.round + 1) + ' / ' + boots.length, 40, 44, T.colors.dim, 24);
+  text(boot.name, 40, 78, T.colors.dim, 22);
+
+  const left = Math.ceil(game.timeLeft);
+  text(left + ' с', GAME.width / 2, 52, left <= 10 ? T.colors.bad : T.colors.ink, 44, 'center', 'bold');
+
+  if (game.previewLeft > 0) {
+    const p = Math.ceil(game.previewLeft);
+    text(T.texts.memorize + ' ' + p + ' с', GAME.width / 2, 100,
+         p <= 5 ? T.colors.bad : T.colors.dim, 24, 'center');
+  } else {
+    text(T.texts.fromMemory, GAME.width / 2, 100, T.colors.dim, 24, 'center');
   }
-  requestAnimationFrame(frame);
+}
+
+function drawIdle() {
+  textShade(0, 140);
+  text(T.texts.idleTitle, GAME.width / 2, 56, T.colors.ink, 34, 'center', 'bold');
+  text(T.texts.idleHint, GAME.width / 2, 100, T.colors.dim, 24, 'center');
+}
+
+function drawDone() {
+  text(T.texts.finished, GAME.width / 2, GAME.height * 0.16, T.colors.good, 44, 'center', 'bold');
+  text('Очки: ' + game.score, GAME.width / 2, GAME.height * 0.16 + 56, T.colors.ink, 30, 'center');
+}
+
+// Чобіт лягає поверх стопи: обидва вписані в один квадрат
+function drawResult() {
+  const boot = boots[game.round];
+  drawBootOnFoot(boot.shape, boot, T.preview.resultAlpha);
+
+  const x = sideX(), y = GAME.height * 0.30;
+  const col = game.lastPassed ? T.colors.good : T.colors.bad;
+  text(Math.round(game.lastMatch) + '%', x, y, col, 96, 'center', 'bold');
+  text(game.lastPassed ? T.texts.passed : T.texts.failed, x, y + 76, col, 30, 'center', 'bold');
+  text('потрібно ' + boot.pass + '%', x, y + 118, T.colors.dim, 24, 'center');
+  if (game.lastPoints) {
+    text('+' + game.lastPoints + ' очок', x, y + 168, T.colors.ink, 28, 'center', 'bold');
+  }
+}
+
+function drawBrush() {
+  const r = T.brush.size / 2;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = T.colors.brushShadow;
+  ctx.beginPath(); ctx.arc(pointerX, pointerY, r + 1, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = T.colors.brushRing;
+  ctx.beginPath(); ctx.arc(pointerX, pointerY, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = T.colors.brushRing;
+  ctx.beginPath(); ctx.arc(pointerX, pointerY, 2, 0, Math.PI * 2); ctx.fill();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  КНОПКИ
+// ══════════════════════════════════════════════════════════════
+
+export function setTool(name) { tool.name = name; }
+
+function pushUndo() {
+  const n = srcW * srcH;
+  const snap = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    snap[i] = Math.max(-32000, Math.min(32000, Math.round(dispX[i] * 16)));
+    snap[n + i] = Math.max(-32000, Math.min(32000, Math.round(dispY[i] * 16)));
+  }
+  undoStack.push(snap);
+  if (undoStack.length > T.undoSteps) undoStack.shift();
+}
+
+export function undo() {
+  if (!game.canEdit || !undoStack.length) return false;
+  const snap = undoStack.pop();
+  const n = srcW * srcH;
+  for (let i = 0; i < n; i++) { dispX[i] = snap[i] / 16; dispY[i] = snap[n + i] / 16; }
+  needsWarp = true;
+  return true;
 }

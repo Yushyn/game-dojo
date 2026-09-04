@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Перевірка проєкту</title>
+<style>
+  body { margin:0; padding:32px; background:#0c0b12; color:#e8e6f0;
+         font:16px/1.6 ui-monospace, Menlo, Consolas, monospace; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:#8b869e; margin:0 0 24px; }
+  table { border-collapse:collapse; width:100%; max-width:900px; }
+  td { padding:8px 10px; border-bottom:1px solid #2b2840; vertical-align:top; }
+  td.f { color:#b9b4c9; white-space:nowrap; }
+  .ok   { color:#7ee787; }
+  .bad  { color:#ff7a7a; font-weight:700; }
+  .old  { color:#ffb347; font-weight:700; }
+  #verdict { margin-top:28px; padding:18px 20px; border:1px solid #2b2840;
+             background:#16141f; max-width:900px; font-size:17px; }
+  #verdict.good { border-color:#7ee787; }
+  #verdict.fail { border-color:#ff7a7a; }
+  pre { white-space:pre-wrap; color:#ffb3b3; margin:10px 0 0; font-size:14px; }
+</style>
+</head>
+<body>
+<h1>Перевірка проєкту Game Dojo</h1>
+<p class="sub">Ця сторінка нічого не змінює. Вона лише дивиться, які файли лежать у папці.</p>
+<table id="t"></table>
+<div id="verdict">Перевіряю…</div>
+
+<script>
+// Навмисно звичайний скрипт, а не модуль — щоб працював завжди,
+// навіть коли з модулями щось не так.
+var FILES = [
+  { path:'index.html',      mark:'id="stage"',       need:'нова розмітка з полотном stage' },
+  { path:'src/config.js',   mark:'1920',             need:'розмір 1920×1080' },
+  { path:'src/tuning.js',   mark:'workResolution',   need:'блок image' },
+  { path:'src/game.js',     mark:'LIQUIFY',          need:'рушій Liquify' },
+  { path:'src/main.js',     mark:'data-tool',        need:'кнопки інструментів' },
+  { path:'src/db.js',       mark:'initDb',           need:'безпечне підключення бази' },
+  { path:'assets/foot.png', mark:null,               need:'картинка ноги' }
+];
+
+var rows = [], problems = [];
+
+// Найчастіша причина всіх бід: файл відкрито з диска подвійним кліком.
+// Тоді браузер блокує і fetch, і модулі, і виглядає це так, ніби
+// зникли геть усі файли.
+if (location.protocol === 'file:') {
+  document.getElementById('t').innerHTML =
+    '<tr><td colspan="3" style="color:#ff7a7a;font-size:18px;padding:20px 0">' +
+    'Сторінку відкрито з диска, а не через сервер.</td></tr>';
+  var v0 = document.getElementById('verdict');
+  v0.className = 'fail';
+  v0.innerHTML =
+    '<b>Перевіряти нічого не треба — справа не у файлах.</b><br><br>' +
+    'Ти відкрила сторінку подвійним кліком. У такому режимі браузер блокує ' +
+    'і читання файлів, і запуск коду — тому все виглядає зламаним.<br><br>' +
+    '<b>Як правильно:</b> у VS Code постав розширення <b>Live Server</b>, ' +
+    'потім правою кнопкою по <b>index.html</b> → <b>Open with Live Server</b>.<br>' +
+    'Або в папці проєкту виконай <b style="color:#7bdff2">npx live-server</b>.<br><br>' +
+    'В адресному рядку має бути <b>http://127.0.0.1:…</b>, а не <b>file:///C:/…</b>';
+  throw new Error('file protocol');
+}
+
+function add(file, cls, text, extra) {
+  rows.push('<tr><td class="f">' + file + '</td><td class="' + cls + '">' + text +
+            '</td><td style="color:#8b869e">' + (extra || '') + '</td></tr>');
+  document.getElementById('t').innerHTML = rows.join('');
+}
+
+var i = 0;
+function next() {
+  if (i >= FILES.length) return finish();
+  var f = FILES[i++];
+  fetch(f.path + '?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) {
+      if (!r.ok) { add(f.path, 'bad', 'НЕМАЄ (' + r.status + ')', 'файл не знайдено'); problems.push(f.path + ' — відсутній'); return next(); }
+      if (f.mark === null) {
+        return r.blob().then(function (b) {
+          if (b.size < 100) { add(f.path, 'bad', 'ПОРОЖНІЙ', b.size + ' байт'); problems.push(f.path + ' — порожній'); }
+          else add(f.path, 'ok', 'на місці', Math.round(b.size / 1024) + ' КБ');
+          next();
+        });
+      }
+      return r.text().then(function (txt) {
+        if (txt.indexOf(f.mark) === -1) {
+          add(f.path, 'old', 'СТАРА ВЕРСІЯ', 'немає: ' + f.need);
+          problems.push(f.path + ' — стара версія');
+        } else {
+          add(f.path, 'ok', 'нова версія', Math.round(txt.length / 1024) + ' КБ');
+        }
+        next();
+      });
+    })
+    .catch(function (e) {
+      add(f.path, 'bad', 'ПОМИЛКА', e.message);
+      problems.push(f.path + ' — ' + e.message);
+      next();
+    });
+}
+
+function finish() {
+  var v = document.getElementById('verdict');
+  if (problems.length) {
+    v.className = 'fail';
+    v.innerHTML = '<b>Знайдено проблеми:</b><br>• ' + problems.join('<br>• ') +
+      '<br><br>Розпакуй архів іще раз і переконайся, що ці файли справді замінились.';
+    return;
+  }
+  // Файли на місці — перевіряємо, чи стикуються модулі між собою.
+  // Саме тут ламається найчастіше: index.html новий, а src/ старий,
+  // і тоді браузер мовчки відмовляється запускати скрипт цілком.
+  v.innerHTML = 'Усі файли нові. Перевіряю стикування модулів…';
+  var stamp = '?v=' + Date.now();
+
+  Promise.all([
+    import('./src/game.js' + stamp),
+    import('./src/db.js' + stamp)
+  ]).then(function (mods) {
+    var needGame = ['start','tool','setTool','setSize','setStrength','setHardness',
+                    'setGrid','undo','resetAll','exportPNG','setStrokeListener'];
+    var needDb   = ['topScores','submitScore','initDb'];
+    var lost = needGame.filter(function (n) { return !(n in mods[0]); })
+      .map(function (n) { return 'game.js: ' + n; })
+      .concat(needDb.filter(function (n) { return !(n in mods[1]); })
+      .map(function (n) { return 'db.js: ' + n; }));
+
+    if (lost.length) {
+      v.className = 'fail';
+      v.innerHTML = '<b>Модулі не стикуються.</b> Бракує:<pre>' + lost.join('\n') + '</pre>';
+      return;
+    }
+    v.className = 'good';
+    v.innerHTML = '<b>Усе гаразд.</b> Файли нові, модулі стикуються.<br>' +
+      'Відкривай index.html і онови сторінку через Ctrl+Shift+R.';
+  }).catch(function (e) {
+    v.className = 'fail';
+    v.innerHTML = '<b>Код не завантажується.</b><pre>' + String(e && e.message || e) + '</pre>';
+  });
+}
+next();
+</script>
+</body>
+</html>

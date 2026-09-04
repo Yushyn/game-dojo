@@ -1,2 +1,14 @@
-# Auto detect text files and perform LF normalization
+# Текстові файли — нормалізація перенесень рядків
 * text=auto
+
+# Картинки й звук git не має чіпати взагалі.
+# Без цих рядків він іноді псує бінарні файли при коміті з Windows.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.mp3 binary
+*.ogg binary
+*.wav binary

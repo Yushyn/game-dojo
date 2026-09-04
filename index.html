@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Game Dojo — болванка</title>
+<title>Game Dojo</title>
 <style>
   :root {
     --bg: #0c0b12;
@@ -23,52 +23,108 @@
     font: 15px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     display: flex;
     align-items: flex-start;
-    padding: 24px;
-    gap: 20px;
+    padding: 20px;
+    gap: 18px;
   }
   h1 {
     font-size: 13px;
     letter-spacing: .18em;
     text-transform: uppercase;
     color: var(--dim);
-    margin: 0 0 12px;
+    margin: 0 0 10px;
     font-weight: 500;
   }
+  h2 {
+    font-size: 12px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin: 0 0 10px;
+    font-weight: 500;
+  }
+
+  /* Полотно 1920×1080. Внутрішній розмір фіксований, на екран
+     розтягується через CSS зі збереженням пропорції 16:9. */
   canvas {
     display: block;
     width: 100%;
     height: auto;
     aspect-ratio: 16 / 9;
-    /* Поле не вище за вікно, щоб не доводилось скролити */
-    max-height: calc(100vh - 130px);
+    max-height: calc(100vh - 110px);
     background: #12111a;
     border: 1px solid var(--line);
-    image-rendering: pixelated;
     margin-inline: auto;
+    cursor: crosshair;
+    touch-action: none;   /* щоб на планшеті не скролилась сторінка */
   }
-  /* Ігрова зона займає весь вільний простір, панель праворуч фіксована */
   .stage { flex: 1 1 auto; min-width: 0; }
   .hud {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-top: 10px;
+    margin-top: 8px;
     color: var(--dim);
     font-size: 13px;
   }
-  .hud b { color: var(--gold); font-size: 20px; font-weight: 600; }
+  .hud b { color: var(--gold); font-weight: 600; }
+
   aside {
-    flex: 0 0 280px;
+    flex: 0 0 300px;
     background: var(--panel);
     border: 1px solid var(--line);
     padding: 16px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
   }
-  ol { list-style: none; margin: 0 0 16px; padding: 0; }
+  .sep { height: 1px; background: var(--line); margin: 18px 0; }
+
+  /* Кнопки інструментів */
+  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tools button {
+    padding: 9px 6px;
+    font-size: 13px;
+    text-align: center;
+  }
+  .tools button.wide { grid-column: 1 / -1; }
+  .tools button.on {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #101a1f;
+  }
+
+  /* Головна кнопка */
+  button.primary {
+    margin-top: 16px;
+    padding: 12px 10px;
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #101a1f;
+    font-size: 15px;
+  }
+  button.primary:hover { background: #16242b; }
+
+  /* Табло */
+  .stats { margin-top: 18px; }
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .stat b { color: var(--ink); font-weight: 600; font-size: 15px; }
+  .stat b.gold { color: var(--gold); }
+  .stat b.warn { color: #ff7a7a; }
+
+  ol { list-style: none; margin: 0 0 14px; padding: 0; }
   li { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
   li.empty { color: var(--dim); border: 0; font-size: 13px; }
   .rank { color: var(--dim); width: 1.5em; }
   .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pts { color: var(--gold); }
+
   input, button {
     font: inherit;
     width: 100%;
@@ -82,13 +138,13 @@
   button:disabled { opacity: .5; cursor: default; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .status { color: var(--dim); font-size: 12px; min-height: 2em; margin-top: 8px; }
-  .keys { color: var(--dim); font-size: 12px; margin-top: 14px; }
+  .keys { color: var(--dim); font-size: 11px; margin-top: 14px; line-height: 1.7; }
+  .keys b { color: var(--ink); font-weight: 600; }
 
-  /* Вузький екран — панель під поле */
-  @media (max-width: 900px) {
-    body { flex-wrap: wrap; padding: 16px; }
+  @media (max-width: 1000px) {
+    body { flex-wrap: wrap; padding: 12px; }
     .stage { flex: 1 1 100%; }
-    aside { flex: 1 1 100%; }
+    aside { flex: 1 1 100%; max-height: none; }
     canvas { max-height: none; }
   }
 </style>
@@ -96,25 +152,70 @@
 <body>
 
 <div class="stage">
-  <h1 id="title">Game Dojo — болванка</h1>
-  <canvas id="game" tabindex="0"></canvas>
+  <h1 id="title">Game Dojo</h1>
+  <canvas id="stage"></canvas>
   <div class="hud">
-    <span id="controls-hint">WASD / стрілки</span>
-    <span><span id="score-label">Очки:</span> <b id="score">0</b></span>
+    <span id="hint">Тягни мишкою по картинці</span>
+
   </div>
 </div>
 
 <aside>
-  <h1 id="board-title">Топ-10</h1>
+  <h2 id="tools-title">Інструмент</h2>
+  <div class="tools">
+    <button data-tool="push" id="tool-push">Рухати</button>
+    <button data-tool="restore" id="tool-restore">Відновити</button>
+  </div>
+
+  <button id="action" class="primary">Почати</button>
+
+  <div class="stats">
+    <div class="stat"><span>Раунд</span><b id="round">—</b></div>
+    <div class="stat"><span>Чобіт</span><b id="boot-name">—</b></div>
+    <div class="stat"><span>Час</span><b id="timer">—</b></div>
+    <div class="stat"><span>Очки</span><b id="score" class="gold">0</b></div>
+  </div>
+
+  <p class="keys">
+    <b>1</b> — Рухати, <b>2</b> — Відновити<br>
+    <b>Ctrl+Z</b> — крок назад<br>
+    Рожеве коло — опора, там стопа не рухається
+  </p>
+
+  <div class="sep"></div>
+
+  <h2 id="board-title">Топ-10</h2>
   <ol id="board"><li class="empty">Завантаження…</li></ol>
   <input id="name" maxlength="24" placeholder="Твоє імʼя" aria-label="Твоє імʼя">
   <button id="save">Зберегти результат</button>
-  <button id="reset">Почати заново</button>
   <p class="status" id="status"></p>
-  <p class="keys">Спрайти клади в <code>assets/hero.png</code> — сітка 32×32, рядки: вниз / вліво / вправо / вгору.</p>
 </aside>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Звичайний скрипт, не модуль: він єдиний, що працює при відкритті
+     файлу з диска. Його завдання — пояснити, чому решта не працює. -->
+<script>
+if (location.protocol === 'file:') {
+  document.addEventListener('DOMContentLoaded', function () {
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;z-index:99;background:#0c0b12;' +
+      'display:flex;align-items:center;justify-content:center;padding:40px;';
+    box.innerHTML =
+      '<div style="max-width:640px;border:1px solid #ff7a7a;background:#16141f;padding:28px 32px">' +
+      '<h2 style="margin:0 0 14px;color:#ff7a7a;font-size:20px;letter-spacing:0">' +
+      'Сторінку відкрито неправильно</h2>' +
+      '<p style="margin:0 0 14px;color:#e8e6f0">Ти відкрила файл подвійним кліком, ' +
+      'прямо з диска. Так браузер із міркувань безпеки блокує весь код сторінки — ' +
+      'тому нічого й не працює.</p>' +
+      '<p style="margin:0 0 14px;color:#e8e6f0">Потрібен локальний сервер. ' +
+      'У VS Code: постав розширення <b>Live Server</b>, потім правою кнопкою по ' +
+      '<b>index.html</b> → <b>Open with Live Server</b>.</p>' +
+      '<p style="margin:0;color:#8b869e;font-size:13px">Або в папці проєкту відкрий ' +
+      'командний рядок і виконай <b style="color:#7bdff2">npx live-server</b></p>' +
+      '</div>';
+    document.body.appendChild(box);
+  });
+}
+</script>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

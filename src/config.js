@@ -6,8 +6,9 @@
 export const SUPABASE_URL = 'https://syhhamuvbkisaedmqzdfa.supabase.co';
 export const SUPABASE_PUBLISHABLE_KEY = 'hsb_publishable_MgiS3rEYZVXqD0MSPhIYtg_Vf4WdaNm';
 
+// Внутрішній розмір полотна. Сторінка масштабує його під вікно,
+// але всі координати всередині коду рахуються саме в цих числах.
 export const GAME = {
-  width: 960,
-  height: 540,
-  tile: 32,
+  width: 1920,
+  height: 1080,
 };
