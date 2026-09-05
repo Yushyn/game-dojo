@@ -62,7 +62,6 @@ export function initScreens(callbacks) {
   prepMusic();
   prepFullscreen();
   prepHowto();
-  prepLostVideo();
   preloadButtons();
   bindButtons();
 
@@ -231,33 +230,8 @@ function paintArt() {
   vid.load();
 }
 
-// ── Ролик програшу ────────────────────────────────────────────
-// Грає один раз і лишається на останньому кадрі. Не зациклюємо
-// навмисно: гільйотина, що падає по колу, — це вже не драма,
-// а набридлива анімація під кнопками.
-function prepLostVideo() {
-  const vid = $('s-lost-video');
-  const V = S.lostVideo || {};
-  if (!vid) return;
-
-  const list = V.sources || (V.src ? [V.src] : []);
-  if (!list.length || V.play === false) { vid.remove(); return; }
-
-  if (V.poster) vid.poster = V.poster;
-  list.forEach((src) => {
-    const el = document.createElement('source');
-    el.src = src;
-    if (src.endsWith('.webm')) el.type = 'video/webm';
-    if (src.endsWith('.mp4'))  el.type = 'video/mp4';
-    vid.appendChild(el);
-  });
-  vid.load();
-}
-
 // Відео крутиться лише поки видно меню — щоб дарма не гріти ноутбук.
 function toggleVideo(name) {
-  playLost(name);
-
   const vid = $('s-menu-video');
   if (!vid) return;
   if (name === 'menu') {
@@ -511,9 +485,6 @@ function updateMusic(name) {
     if (key === want) fadeIn(key); else fadeOut(key);
   });
   syncThunder();
-
-  const lost = $('s-lost-video');
-  if (lost) lost.muted = muted;      // вимикач звуку глушить і гільйотину
 }
 
 function fadeIn(key) {
@@ -590,26 +561,6 @@ function syncThunder() {
 
   if (Math.abs(th.currentTime - target) > 0.25) th.currentTime = target;
   if (th.paused) { const p = th.play(); if (p && p.catch) p.catch(() => {}); }
-}
-
-// Ролик програшу запускаємо з початку щоразу, коли екран
-// показують, і зупиняємо, щойно з нього пішли.
-function playLost(name) {
-  const vid = $('s-lost-video');
-  if (!vid) return;
-  const V = S.lostVideo || {};
-
-  if (name !== 'lost') { vid.pause(); return; }
-
-  vid.muted = muted;
-  vid.volume = V.volume ?? 0.8;
-
-  // Тим, хто просив менше руху в системі, показуємо лише кадр.
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-  try { vid.currentTime = 0; } catch (e) { /* ще не готове — не біда */ }
-  const p = vid.play();
-  if (p && p.catch) p.catch(() => {});
 }
 
 // ── Кнопки ────────────────────────────────────────────────────
