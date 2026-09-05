@@ -364,32 +364,32 @@ export const TUNING = {
     hudTimer: 'Timer: {sec}s',                     // над смужкою часу
 
     // Що написано над смужкою під час вступу, поки таймер ще не пішов
-    introBoot:    'Дивись уважно',
-    introOutline: 'Запамʼятай контур',
+    introBoot:    'Watch closely',
+    introOutline: 'Remember the shape',
 
     // Результат раунду, великим по центру
-    passed: 'ЗАРАХОВАНО',
-    failed: 'НЕ ЗАРАХОВАНО',
-    need:   'потрібно {pass}%',
-    points: '+{n} очок',
-    retry:  'Ще одна спроба',
+    passed: 'APPROVED!',
+    failed: 'REJECTED!',
+    need:   '{pass}% required.',
+    points: '+{n} points',
+    retry:  'One more leg',
 
     // Вікно «вийти в меню?», яке зʼявляється по хрестику
-    askLeave: 'Вийти в головне меню?',
-    askNote:  'Раунд не зарахується, очки за цю гру пропадуть.',
-    askYes:   'Так',
-    askNo:    'Ні',
+    askLeave: 'Return to the main menu?'',
+    askNote:  'This round won’t count, and you’ll lose all points earned in this game.',
+    askYes:   'Yes',
+    askNo:    'No',
 
     // Екран результату в кінці гри
-    resultTitle:     'Гру закінчено',
-    resultScore:     'Твій рахунок',
-    namePlaceholder: 'Твоє імʼя',
-    saveButton:      'Зберегти результат',
-    saving:          'Зберігаю…',
-    saved:           'Збережено.',
-    needName:        'Впиши імʼя.',
-    boardTitle:      'Топ-10',
-    emptyBoard:      'Ще нікого. Будь першим.',
+    resultTitle:     'Legs Over. Game Over',
+    resultScore:     'Your Score',
+    namePlaceholder: 'Your Name',
+    saveButton:      'Save Score',
+    saving:          'Saving…',
+    saved:           'Score Saved!',
+    needName:        'Enter your name.',
+    boardTitle:      'Top-10',
+    emptyBoard:      'No scores yet. Be the first!',
   },
 
   // ── КОЛЬОРИ ──────────────────────────────────────────────────
