@@ -46,6 +46,9 @@
 
   /* ══ ЕКРАНИ ══════════════════════════════════════════════════
      Видно рівно один. Перемикає src/screens.js. */
+  /* Екрани сховані, показує потрібний src/screens.js.
+     ВИНЯТОК: перший, чорний екран має клас .on прямо в розмітці —
+     щоб його було видно навіть якщо код узагалі не запустився. */
   .screen { display: none; }
   .screen.on { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
   .screen-game.on {
@@ -315,7 +318,7 @@
      Браузер забороняє грати звук, доки людина хоч раз не клацне
      по сторінці. Цей клік і є дозволом: після нього ми вмикаємо
      аудіо, і далі музика вже може стартувати сама. -->
-<section class="screen screen-press" data-screen="press">
+<section class="screen screen-press on" data-screen="press">
   <button class="press" id="s-press" data-go="loading">PRESS TO START</button>
 </section>
 
@@ -438,6 +441,36 @@ if (location.protocol === 'file:') {
       '</div>';
     document.body.appendChild(box);
   });
+}
+</script>
+<!-- Сторож запуску. Теж звичайний скрипт, не модуль.
+     Якщо через 5 секунд гра не подала ознак життя — значить,
+     якогось файлу в папці src/ немає або він із помилкою.
+     Раніше в такому разі був просто чорний екран без пояснень. -->
+<script>
+if (location.protocol !== 'file:') {
+  setTimeout(function () {
+    if (window.__gameBooted) return;
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;z-index:98;background:#0c0b12;' +
+      'display:flex;align-items:center;justify-content:center;padding:40px;' +
+      'font:15px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#e8e6f0';
+    box.innerHTML =
+      '<div style="max-width:640px;border:1px solid #ff7a7a;background:#16141f;padding:28px 32px">' +
+      '<h2 style="margin:0 0 14px;color:#ff7a7a;font-size:20px;letter-spacing:0;text-transform:none">' +
+      'Гра не запустилась</h2>' +
+      '<p style="margin:0 0 14px">Код не виконався. Майже завжди це означає, що в папці ' +
+      '<b>src</b> бракує якогось файлу — наприклад, папку замінили цілком, ' +
+      'разом із тими файлами, яких не було в архіві.</p>' +
+      '<p style="margin:0 0 14px">У src/ має лежати шість файлів: <b>config.js, tuning.js, ' +
+      'game.js, main.js, db.js, screens.js</b>.</p>' +
+      '<p style="margin:0 0 14px">Відкрий <b style="color:#7bdff2">check.html</b> — він покаже, ' +
+      'якого саме бракує. Точна причина також є у F12 → Console.</p>' +
+      '<p style="margin:0;color:#8b869e;font-size:13px">Якщо файли на місці — надішли цей ' +
+      'екран і вміст консолі.</p>' +
+      '</div>';
+    document.body.appendChild(box);
+  }, 5000);
 }
 </script>
 <script type="module" src="src/main.js"></script>

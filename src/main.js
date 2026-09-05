@@ -5,6 +5,10 @@ import { start, tool, setTool, undo, action, reset, getState } from './game.js';
 import { topScores, submitScore, initDb, dbReady } from './db.js';
 import { initScreens, showScreen, currentScreen } from './screens.js';
 
+// Позначка для сторожа запуску в index.html: код дожив досюди,
+// значить, усі файли на місці.
+window.__gameBooted = true;
+
 const t = TUNING.texts;
 const $ = (id) => document.getElementById(id);
 
