@@ -54,7 +54,7 @@ if (missing.length) {
     '— схоже, index.html лишився старий. Заміни його з архіву.');
 }
 
-// ── Запуск гри ───────────────────────────────────────────────-
+// ── Запуск гри ────────────────────────────────────────────────
 // Картинки їдуть одразу, ще поки людина дивиться на титульний екран.
 const canvas = $('stage');
 const statusEl = $('status');
@@ -80,12 +80,12 @@ initScreens({
   onOpenLeaderboard: () => refreshBoard(),
 });
 
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 //  КНОПКИ ІНСТРУМЕНТІВ
 //  Три восьмикутники внизу екрана. Що на них намальовано і який
 //  діаметр пензля за кожним стоїть — усе в блоці `brush` у tuning.js.
 //  Сторінка нічого не вигадує: бере список інструментів і малює його.
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 
 const brushBox = $('brushes');
 let brushButtons = [];
@@ -151,12 +151,12 @@ addEventListener('keydown', (e) => {
   if (n >= 1 && n <= brushButtons.length) setBrush(n - 1);
 });
 
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 //  ВИХІД У МЕНЮ
 //  Хрестик не викидає одразу: спершу питає. Поки питання на
 //  екрані, гра стоїть на паузі — таймер не тікає, стопу рухати
 //  не можна, а сцена притемнена самим вікном.
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 
 const askBox = $('ask');
 
@@ -185,11 +185,18 @@ $('ask-yes')?.addEventListener('click', () => {
   reset();
 });
 
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 //  ЖИТТЯ
-//  Значки праворуч від смужки часу. Скільки життів лишилось,
-//  стільки й видно; втрачені гаснуть зліва направо.
-// ═════════════════════════════════════════════════════════════=
+//  Значки праворуч від смужки часу. Втрачене життя не зникає —
+//  його значок наливається червоним і таким лишається до кінця
+//  гри, як зарубка. Червоніє справа наліво: перший втрачений —
+//  той, що стоїть трохи вище.
+//
+//  Червоне не «фільтр поверх картинки», а окремий шар: та сама
+//  картинка використана як трафарет (mask), і крізь неї
+//  проступає суцільний червоний. Тому червоніє рівно силует
+//  ступні, а не прямокутник навколо неї.
+// ══════════════════════════════════════════════════════════════
 
 const livesBox = $('lives');
 let lifeIcons = [];
@@ -200,16 +207,34 @@ function buildLives() {
   const count = Math.max(1, L.count ?? 2);
   const icons = L.icons || [];
 
+  livesBox.style.setProperty('--life-red', L.iconRed ?? '#c02020');
+  livesBox.style.setProperty('--life-red-alpha', L.iconRedAlpha ?? 0.9);
+  livesBox.style.setProperty('--life-dim', L.iconDim ?? 0.45);
+  livesBox.style.setProperty('--life-icon-fade', (L.iconFadeSeconds ?? 0.5) + 's');
+
   livesBox.innerHTML = '';
   lifeIcons = [];
   for (let i = 0; i < count; i++) {
     const src = icons[i] || icons[icons.length - 1];
     if (!src) break;
+
+    const cell = document.createElement('span');
+    cell.className = 'life';
+
     const im = document.createElement('img');
     im.src = src;
     im.alt = '';
-    livesBox.appendChild(im);
-    lifeIcons.push(im);
+    cell.appendChild(im);
+
+    // Червоний шар: та сама картинка як трафарет.
+    const tint = document.createElement('i');
+    tint.className = 'life-tint';
+    tint.style.webkitMaskImage = 'url("' + src + '")';
+    tint.style.maskImage = 'url("' + src + '")';
+    cell.appendChild(tint);
+
+    livesBox.appendChild(cell);
+    lifeIcons.push(cell);
   }
 }
 buildLives();
@@ -250,20 +275,14 @@ soundEl?.addEventListener('error', () => {
     ' — перевір, чи лежить цей файл у assets/');
 });
 
-// Затемнення на вхід і вихід. Порядок такий:
-//   1. сцена гасне до чорного
-//   2. ролик стартує й чекає СВОГО ПЕРШОГО КАДРУ
-//   3. і аж тоді проявляється з чорноти
-// Крок 2 важливий: без нього бувало, що чорнота вже зійшла,
-// а відео ще не встиг намалюватись — і глядач бачив стрибок.
+// Затемнення на вхід і вихід. Сцена спершу гасне, і вже з
+// чорноти проявляється ролик — без цього був різкий стик між
+// грою і відео.
 const fadeEl = $('life-fade');
-const fadeMs = Math.round((TUNING.lives?.fadeSeconds ?? 0.45) * 1000);
+const fadeMs = Math.round((TUNING.lives?.fadeSeconds ?? 0.35) * 1000);
 let fadeTimer = 0;
 
-if (fadeEl) {
-  fadeEl.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
-  animEl?.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
-}
+if (fadeEl) fadeEl.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
 
 function showLifeAnim(on, idx) {
   if (!animEl || on === animPlaying) return;
@@ -274,45 +293,28 @@ function showLifeAnim(on, idx) {
   clearTimeout(fadeTimer);
 
   if (on) {
-    fadeEl?.classList.add('on');              // 1. сцена гасне
+    fadeEl?.classList.add('on');        // 1. сцена гасне
 
-    fadeTimer = setTimeout(() => {
+    fadeTimer = setTimeout(() => {      // 2. коли стало чорно — пускаємо ролик
       animEl.hidden = false;
       if (animEl.getAttribute('src') !== src) animEl.src = src;
       try { animEl.currentTime = 0; } catch (e) {}
       animEl.play().catch(() => {});
       playAnimSound(idx);
-
-      // 2. чекаємо перший намальований кадр, але не довше 300 мс
-      let shown = false;
-      const reveal = () => {
-        if (shown) return;
-        shown = true;
-        animEl.classList.add('on');           // 3. ролик проявляється
-        fadeEl?.classList.remove('on');
-      };
-      animEl.addEventListener('playing', reveal, { once: true });
-      setTimeout(reveal, 300);
+      fadeEl?.classList.remove('on');   // 3. і проявляємо його з чорноти
     }, fadeMs);
 
-    duckMusic(true);                          // музика не спиняється, лише стихає
+    duckMusic(true);                    // музика не спиняється, лише стихає
   } else {
-    // Ролик закінчується чорним кадром, тому чорноту вмикаємо
-    // БЕЗ анімації — на екрані нічого не смикнеться. А вже з неї
-    // плавно проявляється гра.
-    fadeEl?.classList.add('instant');
+    // Обидва ролики закінчуються чорним кадром, тож затемнення
+    // вмикаємо одразу — на екрані нічого не смикнеться.
     fadeEl?.classList.add('on');
-
-    animEl.classList.remove('on');
     animEl.hidden = true;
     animEl.pause();
     stopAnimSound();
     duckMusic(false);
 
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      fadeEl?.classList.remove('instant');
-      fadeEl?.classList.remove('on');
-    }));
+    fadeTimer = setTimeout(() => fadeEl?.classList.remove('on'), 30);
   }
 }
 
@@ -331,9 +333,9 @@ function stopAnimSound() {
   try { soundEl.currentTime = 0; } catch (e) {}
 }
 
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 //  ПОКАЗ СТАНУ
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 
 const barEl = $('hud-bar');
 const timerEl = $('hud-timer');
@@ -341,39 +343,23 @@ let resultShown = false;
 let lostShown = false;
 
 function render(s) {
+
   const st = s || getState();
 
+
+
   // Поточний етап видно в розмітці: зручно і для стилів, і щоб
+
   // подивитись у девтулзах, на чому саме гра зупинилась.
+
   document.body.dataset.phase = st.phase;
+
 
   put('hud-round', 'textContent',
       fill(t.hudRound, { name: st.bootName, n: st.round + 1, total: st.total || 1 }));
   put('hud-goal', 'textContent', fill(t.hudGoal, { pass: st.pass }));
 
-  // Таймер і смужка. Під час вступу робочий час ще не йде — там
-  // пишемо, що зараз відбувається, а смужка стоїть порожня.
-  if (timerEl) {
-    if (st.phase === 'play') {
-      timerEl.textContent = fill(t.hudTimer, { sec: Math.ceil(st.timeLeft) });
-      timerEl.classList.toggle('warn', st.timeLeft <= 10);
-    } else if (st.phase === 'intro') {
-      timerEl.textContent = st.introT < TUNING.intro.bootSeconds ? t.introBoot : t.introOutline;
-      timerEl.classList.remove('warn');
-    } else {
-      timerEl.textContent = fill(t.hudTimer, { sec: 0 });
-      timerEl.classList.remove('warn');
-    }
-  }
-
-  if (barEl) {
-    // Смужка ВБУВАЄ: на початку раунду повна, далі правий її край
-    // повзе вліво. Порожня — час вийшов.
-    const total = TUNING.round.totalSeconds || 1;
-    const left = st.phase === 'play' ? st.timeLeft / total
-               : st.phase === 'intro' ? 1 : 0;
-    barEl.style.width = Math.max(0, Math.min(1, left)) * 100 + '%';
-  }
+  renderTime(st);
 
   brushButtons.forEach((b, i) => {
     b.classList.toggle('on', i === st.brush);
@@ -383,7 +369,8 @@ function render(s) {
   // Значки життів
   // Гаснуть СПРАВА наліво: перший втрачений — правий значок,
   // той, що стоїть трохи вище.
-  lifeIcons.forEach((im, i) => im.classList.toggle('gone', i >= st.lives));
+  // Втрачене життя не ховаємо, а позначаємо червоним.
+  lifeIcons.forEach((el, i) => el.classList.toggle('lost', i >= st.lives));
 
   // Другий запобіжник: ролик і його звук — лише на екрані гри.
   showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);
@@ -405,6 +392,48 @@ function render(s) {
   if (st.phase !== 'done') resultShown = false;
 }
 
+// ── Таймер і смужка часу ──────────────────────────────────────
+// Винесено окремо від решти інтерфейсу, бо оновлюється НА КОЖЕН
+// КАДР. Решта (назва чобота, кнопки, життя) міняється рідко —
+// їй досить п'яти разів на секунду.
+function renderTime(st) {
+  if (timerEl) {
+    if (st.phase === 'play') {
+      timerEl.textContent = fill(t.hudTimer, { sec: Math.ceil(st.timeLeft) });
+      timerEl.classList.toggle('warn', st.timeLeft <= 10);
+    } else if (st.phase === 'intro') {
+      timerEl.textContent = st.introT < TUNING.intro.bootSeconds ? t.introBoot : t.introOutline;
+      timerEl.classList.remove('warn');
+    } else {
+      timerEl.textContent = fill(t.hudTimer, { sec: 0 });
+      timerEl.classList.remove('warn');
+    }
+  }
+
+  if (barEl) {
+    // Смужка ВБУВАЄ: на початку раунду повна, далі правий її край
+    // повзе вліво. Порожня — час вийшов.
+    const total = TUNING.round.totalSeconds || 1;
+    const left = st.phase === 'play' ? st.timeLeft / total
+               : st.phase === 'intro' ? 1 : 0;
+    const pc = Math.max(0, Math.min(1, left)) * 100;
+    // Пишемо в стиль лише тоді, коли число справді змінилось:
+    // однакове значення щокадру змушувало б браузер перераховувати
+    // розкладку намарно.
+    const next = pc.toFixed(2) + '%';
+    if (next !== lastBarWidth) { barEl.style.width = next; lastBarWidth = next; }
+  }
+}
+let lastBarWidth = '';
+
+// Смужка йде на кожен кадр, решта інтерфейсу — п'ять разів на
+// секунду. Раніше все разом оновлювалось раз на 200 мс, і смужка
+// через це рухалась ривками: стрибок, стоп, стрибок.
+(function timeLoop() {
+  requestAnimationFrame(timeLoop);
+  renderTime(getState());
+})();
+
 setInterval(() => render(), 200);
 render();
 
@@ -414,9 +443,9 @@ $('lost-again')?.addEventListener('click', () => {
   reset();
 });
 
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 //  ЛІДЕРБОРД
-// ═════════════════════════════════════════════════════════════=
+// ══════════════════════════════════════════════════════════════
 
 const nameEl = $('name'), saveBtn = $('save');
 const boards = [$('board-full')].filter(Boolean);
@@ -427,7 +456,7 @@ if (nameEl) {
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>\"']/g, (c) =>
+  return String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
