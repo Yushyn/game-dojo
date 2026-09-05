@@ -228,7 +228,9 @@ function reportBaselines() {
     const fr = frameFor(b);
     roundCutY = cutLineFor(b, fr);
     const v = overlapPercent(footGrid(), bootGrid(b, fr));
-    return `  ${b.name}: без жодного руху ${v.toFixed(1)}%, поріг ${b.pass}%`;
+    const fit = fr && fr.shrink < 0.999
+      ? `, зменшено до ${Math.round(fr.shrink * 100)}% щоб улізти в рамку` : '';
+    return `  ${b.name}: без жодного руху ${v.toFixed(1)}%, поріг ${b.pass}%${fit}`;
   });
   roundCutY = 0;
   console.log('Game Dojo — баланс порогів:\n' + lines.join('\n'));
@@ -377,19 +379,57 @@ function bboxOfImage(img) {
            w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back };
 }
 
-function frameFor(boot, bbox) {
+function frameFor(boot, bbox, forceShrink) {
   const bb = bbox || boot.bbox;
   if (!footBB || !bb) return null;
 
   // Прикладаємо по ДОВЖИНІ стопи, а підошву чобота ставимо на ту саму
   // землю, що й підошву стопи. Раніше рівняли по більшій стороні — і чобіт
   // роздувався на всю ногу, бо стопа з гомілкою висока, а чобіт широкий.
-  const k = (footBB.w / bb.w) * boot.scale;
+  let k = (footBB.w / bb.w) * boot.scale;
+
+  // ...і додатково вганяємо у дозволену рамку, щоб високі чоботи
+  // не залазили на смужку часу, а довгі — на дівчинку.
+  const shrink = forceShrink !== undefined ? forceShrink : shrinkToArea(bb, k);
+  k *= shrink;
+
   return {
     k,
+    shrink,
     dx: footBB.cx - bb.cx * k + boot.offsetX * footBB.w,
     dy: (footBB.y1 + 1) - bb.bottom * k + boot.offsetY * footBB.h,
   };
+}
+
+// У скільки разів зменшити чобіт, щоб він улігся в рамку з tuning.js.
+// Рахуємо точно по краях: чобіт стоїть підошвою на землі стопи й
+// вирівняний по її центру, тож де опиниться кожен його край, відомо
+// наперед. 1 означає «і так влазить».
+function shrinkToArea(bb, k) {
+  const A = T.bootArea;
+  if (!A || A.on === false || !footBB || !imgScale) return 1;
+
+  // Межі рамки в координатах буфера стопи
+  const toX = (f) => (GAME.width * f - imgX) / imgScale;
+  const toY = (f) => (GAME.height * f - imgY) / imgScale;
+
+  const sole = footBB.y1 + 1;              // підошва — вона лишається на місці
+  const cx = footBB.cx;                    // чобіт вирівняний по центру стопи
+  let s = 1;
+
+  if (typeof A.top === 'number') {
+    const room = sole - toY(A.top);        // скільки є вгору від підошви
+    if (room > 0) s = Math.min(s, room / (bb.h * k));
+  }
+  // Ліворуч і праворуч чобіт росте від центру стопи в обидва боки,
+  // тому беремо вужчий бік — інакше з одного краю все одно вилізе.
+  const halves = [];
+  if (typeof A.left === 'number') halves.push(cx - toX(A.left));
+  if (typeof A.right === 'number') halves.push(toX(A.right) - cx);
+  const half = halves.length ? Math.min(...halves) : 0;
+  if (half > 0) s = Math.min(s, half / (bb.w * k / 2));
+
+  return Math.max(0.05, Math.min(1, s));
 }
 
 // Де проходить лінія відрізу: по верху халяви чобота.
@@ -655,7 +695,12 @@ function beginRound(i) {
   ensureWarp();                       // щоб рамка стопи була від НЕЗІМʼЯТОЇ стопи
   const boot = boots[i];
   roundFrame = frameFor(boot);
-  roundOutline = boot.outlineBBox ? frameFor(boot, boot.outlineBBox) : roundFrame;
+  // Контур зменшуємо ТИМ САМИМ множником, що й чобіт: якщо рахувати
+  // окремо, його рамка на пару пікселів інша — і контур ліг би трохи
+  // мимо чобота.
+  roundOutline = boot.outlineBBox
+    ? frameFor(boot, boot.outlineBBox, roundFrame ? roundFrame.shrink : undefined)
+    : roundFrame;
   roundCutY = cutLineFor(boot, roundFrame);
   roundTarget = bootGrid(boot, roundFrame);
   game.t0 = performance.now();
