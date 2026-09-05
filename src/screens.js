@@ -284,7 +284,8 @@ function prepFullscreen() {
 // знадобляться — тобто перше наведення блимало б порожнечею.
 // Тому просимо його взяти їх заздалегідь.
 function preloadButtons() {
-  ['assets/btn-hover.png', 'assets/btn-pressed.png'].forEach((src) => {
+  ['assets/MenuButton_holder_88_100_88.png', 'assets/MenuButton_pressed_88_100_88.png',
+   'assets/SquareButton_pressed.png'].forEach((src) => {
     const im = new Image();
     im.src = src;
   });
@@ -300,10 +301,12 @@ function preloadButtons() {
 // Так було не завжди: раніше без блоку музика мовчки зникала,
 // і зрозуміти чому було неможливо. Тепер вона грає в будь-якому разі.
 const MUSIC_FALLBACK = {
-  menu:        'assets/menu-music.mp3',
   // Кілька імен на випадок, якщо файл поклали під іншою назвою:
   // пробуємо по черзі, беремо перше, що справді відкрилось.
-  game:        ['assets/game-music.mp3', 'assets/fit.mp3'],
+  // Перші — імена, під якими файли прийшли від художника,
+  // другі — як вони називались у версіях 19-25.
+  menu:        ['assets/The_Macabre_Waltz.mp3', 'assets/menu-music.mp3'],
+  game:        ['assets/fit.mp3', 'assets/game-music.mp3'],
   volume:      0.5,
   fadeSeconds: 1.5,
   showMute:    true,
@@ -314,7 +317,7 @@ const MUSIC_FALLBACK = {
 // коли спалах уже почався. Тому його не крутять самостійно —
 // його веде відео, кадр у кадр.
 const THUNDER_FALLBACK = {
-  src:    ['assets/menu-thunder.mp3', 'assets/sound.mp3'],
+  src:    ['assets/sound.mp3', 'assets/menu-thunder.mp3'],
   volume: 0.7,
   offset: 0,   // + зсуває звук пізніше за картинку, у секундах
 };

@@ -216,7 +216,7 @@
     display: flex; align-items: center; justify-content: center;
     border-style: solid;
     border-width: 0 calc(var(--h) * .7928);   /* 88 / 111 від висоти */
-    border-image-source: url('assets/btn-default.png');
+    border-image-source: url('assets/MenuButton_default_88_100_88.png');
     border-image-slice: 0 88 fill;
     border-image-repeat: stretch;
 
@@ -229,11 +229,11 @@
     transition: color .15s;
   }
   .menu-item:hover, .menu-item:focus-visible {
-    border-image-source: url('assets/btn-hover.png');
+    border-image-source: url('assets/MenuButton_holder_88_100_88.png');
     color: #fff;
   }
   .menu-item:active {
-    border-image-source: url('assets/btn-pressed.png');
+    border-image-source: url('assets/MenuButton_pressed_88_100_88.png');
     color: #cfc3b2;
   }
 
@@ -320,20 +320,22 @@
     margin: 0; text-transform: none;
     text-shadow: 0 3px 18px rgba(0,0,0,.9);
   }
+  /* Кнопка закриття — картинка художника, два стани.
+     Хрестик малюється зверху, бо в самій картинці порожня
+     середина: так він лишається чітким на будь-якому розмірі. */
   .lb-close {
     all: unset; cursor: pointer; flex: none;
-    width: calc(var(--rh) * .92); height: calc(var(--rh) * .92);
+    width: calc(var(--rh) * 1.05); height: calc(var(--rh) * 1.05);
     display: flex; align-items: center; justify-content: center;
-    color: var(--candle-lit);
-    background: rgba(10,8,14,.55);
-    border: 2px solid rgba(216,171,99,.7);
-    /* восьмикутник — та сама форма, що й у значків місця */
-    clip-path: polygon(18% 0, 82% 0, 100% 18%, 100% 82%, 82% 100%,
-                       18% 100%, 0 82%, 0 18%);
-    transition: color .2s, background .2s;
+    color: #cfc7b8;
+    background: url('assets/SquareButton_default.png') center / contain no-repeat;
+    transition: color .15s;
   }
-  .lb-close svg { width: 55%; height: 55%; }
-  .lb-close:hover, .lb-close:focus-visible { color: #fff; background: rgba(216,171,99,.22); }
+  .lb-close svg { width: 42%; height: 42%; }
+  .lb-close:hover, .lb-close:focus-visible, .lb-close:active {
+    background-image: url('assets/SquareButton_pressed.png');
+    color: #fff;
+  }
 
   .lb-list {
     list-style: none; margin: 0; padding: 0 4px 0 0;
@@ -350,7 +352,7 @@
     box-sizing: border-box;
     border-style: solid;
     border-width: 0 calc(var(--rh) * .375) 0 calc(var(--rh) * 1.05);  /* 30 і 84 від 80 */
-    border-image-source: url('assets/lb-row.png');
+    border-image-source: url('assets/Leaderboard_84_100_30.png');
     border-image-slice: 0 30 0 84 fill;
     border-image-repeat: stretch;
     font-family: var(--prose);
@@ -377,9 +379,9 @@
     content: ''; position: absolute; inset: 0;
     background: center / contain no-repeat;
   }
-  .lb-p1::after { background-image: url('assets/place-1.png'); }
-  .lb-p2::after { background-image: url('assets/place-2.png'); }
-  .lb-p3::after { background-image: url('assets/place-3.png'); }
+  .lb-p1::after { background-image: url('assets/Place_1.png'); }
+  .lb-p2::after { background-image: url('assets/Place_2.png'); }
+  .lb-p3::after { background-image: url('assets/Place_3.png'); }
   .lb-p1 { color: #f4dfb4; }
   .lb-p2 { color: #dcdce2; }
   .lb-p3 { color: #dda76d; }
@@ -659,7 +661,7 @@
      Смужка показує справжній прогрес: фон, стопа, чоботи. -->
 <section class="screen screen-loading" data-screen="loading">
   <div class="load-block">
-    <!-- Сліди збирає src/screens.js з одного аркуша assets/loading-feet.png -->
+    <!-- Сліди збирає src/screens.js з одного аркуша assets/RedFeet.png -->
     <div class="feet" id="s-feet"></div>
     <p class="load-note" id="s-load-note">Готуємо сцену</p>
     <p class="load-pct" id="s-load-pct">0%</p>

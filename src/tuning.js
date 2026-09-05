@@ -245,7 +245,7 @@ export const TUNING = {
     // Якщо переекспортуєш аркуш — звір ці числа з новим файлом.
     // Вони в пікселях самої картинки, не екрана.
     loadingArt: {
-      src:    'assets/loading-feet.png',
+      src:    'assets/RedFeet.png',
       width:  101,   // розмір аркуша
       height: 440,
       count:  8,     // скільки відбитків на аркуші
@@ -280,8 +280,8 @@ export const TUNING = {
     // Якщо цей блок видалити, музика все одно гратиме: у screens.js
     // є ті самі значення про запас.
     music: {
-      menu:        'assets/menu-music.mp3',
-      game:        'assets/game-music.mp3',
+      menu:        'assets/The_Macabre_Waltz.mp3',   // музика меню
+      game:        'assets/fit.mp3',                 // музика самої гри
       volume:      0.5,   // 0..1
       fadeSeconds: 1.5,   // за скільки плавно набирає гучність
       showMute:    true,  // false — прибрати вимикач із меню
@@ -291,7 +291,7 @@ export const TUNING = {
     // веде саме відео, кадр у кадр, щоб спалах і удар лишались разом.
     // Якщо файлу немає, гра просто мовчить — не ламається.
     thunder: {
-      src:    'assets/menu-thunder.mp3',
+      src:    'assets/sound.mp3',
       volume: 0.7,
       offset: 0,   // + зсуває звук пізніше за картинку, у секундах
     },
