@@ -249,7 +249,7 @@ export const TUNING = {
     { src: 'assets/boot10.png', outline: 'assets/boot10-outline.png',
       name: 'sOck',         passPercent: 1, cutOffset: 0 },
     { src: 'assets/boot11.png', outline: 'assets/boot11-outline.png',
-      name: 'Do not Fall',       passPercent: 1, cutOffset: 0, offsetX: -0.2},
+      name: 'Do not Fall',       passPercent: 1, cutOffset: 0, offsetX: -0.16},
     { src: 'assets/boot12.png', outline: 'assets/boot12-outline.png',
       name: 'Leshun',     passPercent: 1, cutOffset: 0, offsetX: -0.15},
     { src: 'assets/boot13.png', outline: 'assets/boot13-outline.png',
