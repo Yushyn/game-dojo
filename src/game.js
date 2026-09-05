@@ -74,10 +74,14 @@ let girlCross = 0.5;     // за скільки секунд один ролик
 let toolIcons = [];      // картинки інструментів, по одній на кнопку
 let pedImage = null;     // окремий шар пʼєдестала поверх неї
 let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
+let footImages = [];     // по одній картинці ноги на кожне життя
+let animImage = null;    // повноекранна заглушка при втраті життя
+let tintBuf = null, tintCtxCache = null;   // полотно для червоної ноги
 
 // ── Хід гри ───────────────────────────────────────────────────
 const game = {
-  phase: 'loading',   // loading | idle | play | result | done
+  // loading | idle | intro | play | result | dying | anim | done | lost
+  phase: 'loading',
   round: 0,
   score: 0,
   t0: 0,
@@ -85,7 +89,10 @@ const game = {
   previewLeft: 0,
   introT: 0,
   canEdit: false,
-  attempt: 0,         // яка це спроба на цьому чоботі, рахуючи з нуля
+  lives: 0,           // скільки життів лишилось
+  lifeIndex: 0,       // якою ногою граємо: 0, 1, ...
+  dieT0: 0,           // мить, коли почалась втрата життя
+  lastLife: false,    // це була остання — далі вікно програшу
   paused: false,      // час стоїть: відкрите вікно «вийти в меню?»
   resultT0: 0,        // мить, коли показали результат раунду
   lastMatch: 0,
@@ -131,17 +138,28 @@ export function start(canvasEl, callbacks) {
   }
   if (T.girl?.show) loadGirl();
   loadToolIcons();
+
+  // Повноекранна заставка при втраті життя. Якщо це відео —
+  // ним керує сторінка, тут вантажимо лише картинку.
+  const A = T.lives?.anim || '';
+  if (A && !/\.(webm|mp4)$/i.test(A)) {
+    loadImage(A).then((im) => { animImage = im; })
+      .catch((e) => console.warn('Заставка втрати життя не завантажилась:', e.message));
+  }
   if (T.pedestal?.show) {
     loadImage(T.pedestal.src)
       .then((im) => { pedImage = im; })
       .catch((e) => console.warn('Пʼєдестал не завантажився:', e.message));
   }
 
-  const list = [T.image.src].concat(T.boots.map((b) => b.src));
+  const feet = (T.image.sources && T.image.sources.length)
+    ? T.image.sources : [T.image.src];
+  const list = feet.concat(T.boots.map((b) => b.src));
   Promise.all(list.map(loadImage))
     .then((imgs) => {
-      setupFoot(imgs[0]);
-      boots = T.boots.map((def, i) => prepBoot(def, imgs[i + 1]));
+      footImages = imgs.slice(0, feet.length);
+      setupFoot(footImages[0]);
+      boots = T.boots.map((def, i) => prepBoot(def, imgs[feet.length + i]));
       reportBaselines();
       game.phase = 'idle';
       notify();
@@ -609,9 +627,8 @@ function ensureWarp() { if (needsWarp) warp(); }
 //  ХІД ГРИ
 // ══════════════════════════════════════════════════════════════
 
-function beginRound(i, again) {
+function beginRound(i) {
   game.round = i;
-  game.attempt = again ? game.attempt + 1 : 0;
   brushIndex = startBrush();     // кожен раунд починається із середньої кисті
   dispX.fill(0); dispY.fill(0);
   undoStack.length = 0;
@@ -634,7 +651,7 @@ function introTotal() { return T.intro.bootSeconds + T.intro.outlineSeconds; }
 // Нога зʼявляється разом із контуром і плавно опускається на пʼєдестал.
 // Повертає зсув у пікселях полотна, або null якщо ноги ще немає на сцені.
 function footDrop() {
-  if (game.phase === 'idle') return null;
+  if (game.phase === 'idle' || game.phase === 'lost') return null;
   if (game.phase !== 'intro') return 0;
 
   const I = T.intro;
@@ -669,15 +686,55 @@ function finishRound() {
   notify();
 }
 
-// Що робити після показу результату. Кнопки більше немає —
-// гра сама вирішує: перескласти той самий чобіт, взяти наступний
-// або закінчити гру.
+// Що робити після показу результату. Кнопок немає — гра вирішує сама.
+//
+// Влучив: очки й наступний чобіт. Чоботи скінчились — перемога.
+// Не влучив: мінус життя. Нога на пʼєдесталі блідне й червоніє,
+// далі повноекранна заставка, і на її місце стає наступна нога.
+// Життя скінчились — вікно програшу.
 function afterResult() {
-  const tries = Math.max(1, T.round.attemptsPerBoot || 1);
-  if (!game.lastPassed && game.attempt + 1 < tries) return beginRound(game.round, true);
+  if (game.lastPassed) return nextBootOrWin();
+
+  game.lives = Math.max(0, game.lives - 1);
+  game.lastLife = game.lives <= 0;
+  game.dieT0 = performance.now();
+  game.phase = 'dying';
+  notify();
+}
+
+// Куди йти, коли поточний чобіт позаду
+function nextBootOrWin() {
   if (game.round + 1 < boots.length) return beginRound(game.round + 1);
   game.phase = 'done';
   notify();
+}
+
+// Скільки триває блідніння з червоним
+function dyingTotal() {
+  const L = T.lives || {};
+  return (L.fadeSeconds ?? 0.6) + (L.holdSeconds ?? 1.2);
+}
+
+// Наскільки зараз «мертва» нога: 0 — звичайна, 1 — повністю бліда й червона
+function deathMix() {
+  if (game.phase === 'dying') {
+    const f = Math.max(0.001, T.lives?.fadeSeconds ?? 0.6);
+    return Math.min(1, ((performance.now() - game.dieT0) / 1000) / f);
+  }
+  return (game.phase === 'anim' || game.phase === 'lost') ? 1 : 0;
+}
+
+// Заставка догралась: або наступне життя, або вікно програшу
+function afterAnim() {
+  if (game.lastLife) {
+    game.phase = 'lost';
+    notify();
+    return;
+  }
+  // Наступна нога. Якщо картинок менше, ніж життів, лишається остання.
+  game.lifeIndex = Math.min(footImages.length - 1, game.lifeIndex + 1);
+  setupFoot(footImages[game.lifeIndex]);
+  nextBootOrWin();
 }
 
 // Повернутись до стану «стоїмо на порожній сцені й чекаємо».
@@ -702,8 +759,15 @@ export function reset() {
   game.lastPassed = false;
   game.lastPoints = 0;
   game.canEdit = false;
-  game.attempt = 0;
   game.paused = false;
+  game.lives = Math.max(1, T.lives?.count ?? 2);
+  game.lastLife = false;
+
+  // Повертаємо першу ногу, якщо грали другою
+  if (footImages.length && game.lifeIndex !== 0) {
+    game.lifeIndex = 0;
+    setupFoot(footImages[0]);
+  }
   if (dispX) { dispX.fill(0); dispY.fill(0); }
   undoStack.length = 0;
   needsWarp = true;
@@ -728,6 +792,22 @@ function updateTimers(now) {
   if (game.phase === 'result') {
     game.canEdit = false;
     if ((now - game.resultT0) / 1000 >= (T.round.resultSeconds ?? 3.5)) afterResult();
+    return;
+  }
+  // Нога блідне й червоніє
+  if (game.phase === 'dying') {
+    game.canEdit = false;
+    if ((now - game.dieT0) / 1000 >= dyingTotal()) {
+      game.phase = 'anim';
+      game.dieT0 = now;
+      notify();
+    }
+    return;
+  }
+  // Повноекранна заставка
+  if (game.phase === 'anim') {
+    game.canEdit = false;
+    if ((now - game.dieT0) / 1000 >= (T.lives?.animSeconds ?? 2.5)) afterAnim();
     return;
   }
   if (game.phase !== 'play') { game.canEdit = false; return; }
@@ -786,8 +866,10 @@ export function getState() {
     points: game.lastPoints,
     score: game.score,
     canEdit: game.canEdit,
-    attempt: game.attempt,
-    attemptsPerBoot: Math.max(1, T.round.attemptsPerBoot || 1),
+    lives: game.lives,
+    livesMax: Math.max(1, T.lives?.count ?? 2),
+    lifeIndex: game.lifeIndex,
+    showAnim: game.phase === 'anim',
     pass: boots[game.round]?.pass ?? T.round.passPercent,
     brush: brushIndex,
     paused: game.paused,
@@ -822,7 +904,7 @@ function frame(now) {
   const drop = footDrop();
   if (drop !== null) {
     drawShadow(drop);
-    ctx.drawImage(buf, imgX, imgY + drop, srcW * imgScale, srcH * imgScale);
+    drawFoot(drop);
   }
 
   if (T.compare.showCutLine && (game.phase === 'play' || game.phase === 'result')) drawCutLine();
@@ -830,6 +912,79 @@ function frame(now) {
   if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
   if (game.phase === 'result') drawResult();
   if (game.canEdit && pointerInside) drawBrush();
+  if (game.phase === 'anim') drawLifeAnim();
+}
+
+// Нога на пʼєдесталі. При втраті життя вона блідне й заливається
+// червоним — обидва числа в блоці `lives` у tuning.js.
+function drawFoot(offsetY) {
+  const w = srcW * imgScale, h = srcH * imgScale;
+  const mix = deathMix();
+
+  if (mix <= 0.001) {
+    ctx.drawImage(buf, imgX, imgY + offsetY, w, h);
+    return;
+  }
+
+  const L = T.lives || {};
+  const alpha = 1 - (1 - (L.footAlpha ?? 0.5)) * mix;
+  const red = (L.footRed ?? 0.3) * mix;
+
+  // Червоне змішуємо на ОКРЕМОМУ полотні розміром із саму ногу.
+  // Якщо робити це прямо на сцені, source-atop лягає на все, що
+  // вже намальовано — і червоніє не нога, а весь кадр разом
+  // із пʼєдесталом і дівчинкою.
+  const tc = tintCtx();
+  if (tc && red > 0.002) {
+    tc.clearRect(0, 0, srcW, srcH);
+    tc.globalCompositeOperation = 'source-over';
+    tc.globalAlpha = 1;
+    tc.drawImage(buf, 0, 0);
+    tc.globalCompositeOperation = 'source-atop';   // тільки по непрозорому
+    tc.globalAlpha = red;
+    tc.fillStyle = T.colors.dying || '#c02020';
+    tc.fillRect(0, 0, srcW, srcH);
+    tc.globalCompositeOperation = 'source-over';
+    tc.globalAlpha = 1;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(tc && red > 0.002 ? tintBuf : buf, imgX, imgY + offsetY, w, h);
+  ctx.restore();
+}
+
+// Полотно для підфарбовування ноги. Створюється раз і живе далі.
+function tintCtx() {
+  if (!srcW || !srcH) return null;
+  if (!tintBuf || tintBuf.width !== srcW || tintBuf.height !== srcH) {
+    tintBuf = document.createElement('canvas');
+    tintBuf.width = srcW; tintBuf.height = srcH;
+    tintCtxCache = tintBuf.getContext('2d');
+  }
+  return tintCtxCache;
+}
+
+// Повноекранна заставка при втраті життя. Відео підставляє
+// сторінка, тут малюємо картинку.
+function drawLifeAnim() {
+  const L = T.lives || {};
+  const t = (performance.now() - game.dieT0) / 1000;
+  const total = Math.max(0.2, L.animSeconds ?? 2.5);
+  const fade = Math.min(0.35, total / 4);
+  const a = Math.max(0, Math.min(1, Math.min(t / fade, (total - t) / fade)));
+
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#05040a';
+  ctx.fillRect(0, 0, GAME.width, GAME.height);
+  if (animImage) {
+    // вписуємо цілком, не спотворюючи пропорції
+    const k = Math.min(GAME.width / animImage.width, GAME.height / animImage.height);
+    const w = animImage.width * k, h = animImage.height * k;
+    ctx.drawImage(animImage, (GAME.width - w) / 2, (GAME.height - h) / 2, w, h);
+  }
+  ctx.restore();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1176,9 +1331,7 @@ function drawResult() {
 
   const line = game.lastPoints
     ? T.texts.points.replace('{n}', game.lastPoints)
-    : (!game.lastPassed && game.attempt + 1 < Math.max(1, T.round.attemptsPerBoot || 1)
-        ? T.texts.retry
-        : T.texts.need.replace('{pass}', boot.pass));
+    : T.texts.need.replace('{pass}', boot.pass);
   text(line, x, y + 66, T.colors.dim, 24, 'center');
 }
 

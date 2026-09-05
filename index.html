@@ -466,7 +466,14 @@
 
   /* Шар інтерфейсу. Сам він кліків не ловить — тільки те, що
      всередині, інакше не можна було б мняти стопу. */
-  .hud { position: absolute; inset: 0; pointer-events: none; font-family: var(--display); }
+  .hud {
+    position: absolute; inset: 0; pointer-events: none;
+    font-family: var(--display);
+    transition: opacity .3s ease;
+  }
+  /* Поки йде повноекранна заставка втрати життя, інтерфейс
+     ховається: вона має бути справді на весь екран. */
+  body[data-phase="anim"] .hud { opacity: 0; pointer-events: none; }
   .hud > * { pointer-events: auto; }
   .hud-text { text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 10) rgba(0,0,0,.95); }
 
@@ -529,6 +536,28 @@
     border-image-slice: 0 30 fill;
     border-image-repeat: stretch;
   }
+
+  /* Життя — значки праворуч від смужки часу. Скільки лишилось,
+     стільки й видно; втрачені зникають зліва направо. */
+  .lives {
+    position: absolute; left: calc(var(--u) * 1380); top: calc(var(--u) * 30);
+    display: flex; align-items: flex-start; gap: calc(var(--u) * 14);
+  }
+  .lives img {
+    display: block; height: calc(var(--u) * 95); width: auto;
+    filter: drop-shadow(0 calc(var(--u) * 3) calc(var(--u) * 10) rgba(0,0,0,.9));
+    transition: opacity .45s ease, transform .45s ease;
+  }
+  .lives img.gone { opacity: 0; transform: scale(.6); }
+
+  /* Повноекранний ролик при втраті життя. Картинку-заглушку малює
+     саме полотно; сюди підставляється відео, коли воно зʼявиться. */
+  .life-anim {
+    position: absolute; inset: 0; z-index: 4;
+    width: 100%; height: 100%; object-fit: contain;
+    background: #05040a;
+  }
+  .life-anim[hidden] { display: none; }
 
   /* Восьмикутна кнопка. Одна й та сама картинка для хрестика
      і для трьох кнопок пензля, різниця лише в розмірі. */
@@ -799,12 +828,16 @@
         </div>
       </div>
 
+      <div class="lives" id="lives"></div>
+
       <button class="sq hud-close" id="hud-close" aria-label="Вийти в меню">
         <span class="x"></span>
       </button>
 
       <div class="brushes" id="brushes"></div>
     </div>
+
+    <video class="life-anim" id="life-anim" muted playsinline hidden></video>
 
     <!-- Питання перед виходом. Поки воно відкрите, таймер стоїть. -->
     <div class="ask" id="ask" hidden>
@@ -820,7 +853,23 @@
   </div>
 </section>
 
-<!-- ══ 7. РЕЗУЛЬТАТ ═════════════════════════════════════════════
+<!-- ══ 7. ПРОГРАШ ══════════════════════════════════════════════
+     Показується сам, коли скінчились життя. -->
+<section class="screen screen-page" data-screen="lost">
+  <div class="frame frame-art" data-art>
+    <div class="veil"></div>
+    <div class="page">
+      <h2 class="page-title" id="s-lost-title">Гру програно</h2>
+      <p class="result-score"><span id="s-lost-note">Життя скінчились.</span></p>
+      <div class="ask-row">
+        <button class="menu-item" id="lost-again">Ще раз</button>
+        <button class="menu-item" data-go="menu" id="lost-menu">У меню</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 8. РЕЗУЛЬТАТ ═════════════════════════════════════════════
      Показується сам, коли пройдено всі чоботи. Тут і рахунок,
      і поле для імені — на самому ігровому екрані їх більше немає. -->
 <section class="screen screen-page" data-screen="result">

@@ -40,6 +40,10 @@ put('ask-title', 'textContent', t.askLeave);
 put('ask-note',  'textContent', t.askNote);
 put('ask-yes',   'textContent', t.askYes);
 put('ask-no',    'textContent', t.askNo);
+put('s-lost-title', 'textContent', t.lostTitle);
+put('s-lost-note',  'textContent', t.lostNote);
+put('lost-again',   'textContent', t.lostAgain);
+put('lost-menu',    'textContent', t.lostMenu);
 put('s-result-title', 'textContent', t.resultTitle);
 put('s-result-label', 'textContent', t.resultScore);
 put('name',           'placeholder', t.namePlaceholder);
@@ -176,15 +180,74 @@ $('ask-yes')?.addEventListener('click', () => {
 });
 
 // ══════════════════════════════════════════════════════════════
+//  ЖИТТЯ
+//  Значки праворуч від смужки часу. Скільки життів лишилось,
+//  стільки й видно; втрачені гаснуть зліва направо.
+// ══════════════════════════════════════════════════════════════
+
+const livesBox = $('lives');
+let lifeIcons = [];
+
+function buildLives() {
+  if (!livesBox) return;
+  const L = TUNING.lives || {};
+  const count = Math.max(1, L.count ?? 2);
+  const icons = L.icons || [];
+
+  livesBox.innerHTML = '';
+  lifeIcons = [];
+  for (let i = 0; i < count; i++) {
+    const src = icons[i] || icons[icons.length - 1];
+    if (!src) break;
+    const im = document.createElement('img');
+    im.src = src;
+    im.alt = '';
+    livesBox.appendChild(im);
+    lifeIcons.push(im);
+  }
+}
+buildLives();
+
+// ── Повноекранний ролик при втраті життя ──────────────────────
+// Якщо в tuning.js вказано відео, показуємо його поверх полотна.
+// Якщо картинку — її малює саме полотно, і сюди ми не лізем.
+const animEl = $('life-anim');
+const animSrc = (TUNING.lives?.anim || '');
+const animIsVideo = /\.(webm|mp4)$/i.test(animSrc);
+let animPlaying = false;
+
+if (animEl) {
+  if (animIsVideo) animEl.src = animSrc;
+  else animEl.remove();
+}
+
+function showLifeAnim(on) {
+  if (!animIsVideo || !animEl || on === animPlaying) return;
+  animPlaying = on;
+  animEl.hidden = !on;
+  if (on) {
+    try { animEl.currentTime = 0; } catch (e) {}
+    animEl.play().catch(() => {});
+  } else {
+    animEl.pause();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 //  ПОКАЗ СТАНУ
 // ══════════════════════════════════════════════════════════════
 
 const barEl = $('hud-bar');
 const timerEl = $('hud-timer');
 let resultShown = false;
+let lostShown = false;
 
-function render(s) {
-  const st = s || getState();
+function render(s) {
+  const st = s || getState();
+
+  // Поточний етап видно в розмітці: зручно і для стилів, і щоб
+  // подивитись у девтулзах, на чому саме гра зупинилась.
+  document.body.dataset.phase = st.phase;
 
   put('hud-round', 'textContent',
       fill(t.hudRound, { n: st.round + 1, total: st.total || 1 }));
@@ -218,6 +281,20 @@ function render(s) {
     b.disabled = !st.canEdit;
   });
 
+  // Значки життів
+  // Гаснуть ЗЛІВА направо: перший втрачений — крайній лівий значок.
+  const lost = lifeIcons.length - st.lives;
+  lifeIcons.forEach((im, i) => im.classList.toggle('gone', i < lost));
+
+  showLifeAnim(!!st.showAnim);
+
+  // Життя скінчились — вікно програшу
+  if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {
+    lostShown = true;
+    showScreen('lost');
+  }
+  if (st.phase !== 'lost') lostShown = false;
+
   // Усі чоботи пройдено — самі переводимо на екран результату.
   if (st.phase === 'done' && !resultShown && currentScreen() === 'game') {
     resultShown = true;
@@ -230,6 +307,12 @@ function render(s) {
 
 setInterval(() => render(), 200);
 render();
+
+// «Ще раз» — нова гра з тим самим станом, що й після «Нова гра»
+$('lost-again')?.addEventListener('click', () => {
+  showScreen('game');
+  reset();
+});
 
 // ══════════════════════════════════════════════════════════════
 //  ЛІДЕРБОРД
@@ -274,7 +357,11 @@ saveBtn?.addEventListener('click', async () => {
   const res = await submitScore(name, getState().score);
   saveBtn.disabled = false;
   statusEl.textContent = res.ok ? t.saved : 'Не збереглось: ' + res.reason;
-  if (res.ok) refreshBoard();
+  if (!res.ok) return;
+  refreshBoard();
+  // Результат записано — гравцеві тут більше нічого робити,
+  // повертаємо його в головне меню.
+  setTimeout(() => { if (currentScreen() === 'result') showScreen('menu'); }, 900);
 });
 
 // Базу підключаємо ПІСЛЯ запуску гри, щоб мертва мережа не блокувала картинку.
