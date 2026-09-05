@@ -226,13 +226,29 @@ function toggleFullscreen() {
   }
 }
 
+// Гра запущена з домашнього екрана — панелей браузера вже немає.
+function isStandalone() {
+  return window.navigator.standalone === true ||
+         matchMedia('(display-mode: fullscreen)').matches ||
+         matchMedia('(display-mode: standalone)').matches;
+}
+
 function prepFullscreen() {
   const btn = $('s-full');
   if (!btn) return;
 
+  if (isStandalone()) { btn.remove(); return; }   // вже й так на весь екран
+
   const ask = document.documentElement.requestFullscreen ||
               document.documentElement.webkitRequestFullscreen;
-  if (!ask) { btn.remove(); return; }      // iPhone — кнопка тут тільки б дратувала
+
+  // iPhone: кнопки повного екрана не буде, бо Safari її не виконає.
+  // Натомість підказуємо єдиний спосіб, який там справді працює.
+  if (!ask) {
+    btn.textContent = S.homescreenHint || 'Add to Home Screen for fullscreen';
+    btn.style.cursor = 'default';
+    return;
+  }
 
   const paint = () => {
     btn.textContent = (document.fullscreenElement || document.webkitFullscreenElement)
@@ -488,7 +504,12 @@ function bindButtons() {
 function go(name) {
   // Перший клік по сторінці — єдина мить, коли браузер дозволяє
   // і увімкнути звук, і розгорнутись на весь екран. Не проґав її.
-  if (current === 'press') { unlockAudio(); goFullscreen(); }
+  if (current === 'press') unlockAudio();
+
+  // Просимо повний екран не лише на першому кліку. Браузер міг
+  // відмовити з десятка причин; кожен наступний дотик — нова
+  // законна нагода спитати ще раз, і людині це нічого не коштує.
+  goFullscreen();
 
   if (name === 'game') {
     gameEverOpened = true;

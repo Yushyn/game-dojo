@@ -3,6 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+
+<!-- Safari на iPhone не вміє розгортати сторінки на весь екран.
+     Але вміє інше: якщо додати гру на домашній екран, вона
+     запуститься БЕЗ жодних панелей браузера і одразу горизонтально.
+     Оці чотири рядки — саме про це. -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cinderhella">
+<meta name="theme-color" content="#07060b">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>Game Dojo</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -56,7 +68,12 @@
   .screen.on { display: grid; place-items: center; height: 100dvh; padding: 0; }
   .screen-game.on {
     display: flex; align-items: flex-start; gap: 12px;
-    height: 100dvh; padding: 10px; place-items: initial;
+    height: 100dvh; place-items: initial;
+    /* env(safe-area-*) — це вирізи під камеру й смужку жестів.
+       На звичайних екранах усі нулі, тож поводиться як 10px. */
+    padding: 10px calc(10px + env(safe-area-inset-right))
+             calc(10px + env(safe-area-inset-bottom))
+             calc(10px + env(safe-area-inset-left));
   }
 
   /* Рамка 16:9 — той самий кадр, що й полотно гри,
