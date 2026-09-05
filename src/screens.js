@@ -83,55 +83,49 @@ function fillTexts() {
 
   document.querySelectorAll('.back').forEach((b) => { b.textContent = S.btnBack; });
 
-  buildCredits();
+  buildTeam();
 }
 
-// ── Екран авторів ─────────────────────────────────────────────
-// Це спільне фото команди, а під ним підписи — кожен рівно під
-// своєю людиною. Відсотки лежать у tuning.js (`screens.team`) і
-// зняті з самої картинки по головах.
-//
-// Хитрість тут одна: смужка з підписами звужується рівно до
-// ширини фото. Фото вписується по ВИСОТІ, тож на широкому екрані
-// з боків лишається порожньо — і якби підписи стояли на всю
-// ширину екрана, вони роз'їхались би від своїх людей. Тому після
-// завантаження картинки ми міряємо її справжню ширину й задаємо
-// смужці таку саму.
-function buildCredits() {
+// ── Автори: фото команди з підписами ──────────────────────────
+// Кожен підпис стоїть під своєю людиною. Відсотки лежать
+// у tuning.js, у списку team, і зняті з самої картинки.
+function buildTeam() {
   const box = $('s-team');
+  const P = S.teamPhoto || {};
   if (!box) return;
 
-  const P = S.teamPhoto || {};
-  const team = S.team || [];
   box.innerHTML = '';
 
+  // Підписи стоять у відсотках, тому їхня основа має збігатися
+  // з КАРТИНКОЮ, а не з екраном. Інакше на вузькому вікні, де
+  // фото вужче за контейнер, підписи розʼїжджаються з людьми.
   const stage = document.createElement('div');
   stage.className = 'cr-stage';
 
   const pic = document.createElement('picture');
   if (P.webp) {
     const src = document.createElement('source');
-    src.srcset = P.webp;
-    src.type = 'image/webp';
+    src.srcset = P.webp; src.type = 'image/webp';
     pic.appendChild(src);
   }
   const img = document.createElement('img');
-  img.alt = '';
   img.src = P.png || P.webp || '';
+  img.alt = S.creditsTitle || 'Credits';
   pic.appendChild(img);
   stage.appendChild(pic);
 
   const names = document.createElement('div');
   names.className = 'cr-names';
-  team.forEach((m) => {
-    const el = document.createElement('p');
+  (S.team || []).forEach((p) => {
+    const el = document.createElement('span');
     el.className = 'cr-name';
-    el.style.left = m.x + '%';
-    // Ім'я і прізвище в два рядки: підпис удвічі вужчий,
-    // і сусіди не налазять один на одного на телефоні.
-    const parts = String(m.name || '').trim().split(/\s+/);
+    el.style.left = p.x + '%';
+
+    // Імʼя й прізвище окремими рядками — підпис виходить удвічі
+    // вужчим, і сусідні не налазять один на одного.
+    const parts = String(p.name).trim().split(/\s+/);
     const first = document.createElement('b');
-    first.textContent = parts.shift() || '';
+    first.textContent = parts.shift();
     el.appendChild(first);
     if (parts.length) {
       const rest = document.createElement('i');
@@ -143,23 +137,17 @@ function buildCredits() {
   stage.appendChild(names);
   box.appendChild(stage);
 
-  // Смужка з підписами — рівно по ширині фото, не екрана.
-  // Якщо фото ще немає в папці, беремо ширину всього блоку: тоді
-  // підписи просто стоять рівним рядом, а не збиваються в купу
-  // посеред екрана (саме так це виглядало без цієї гілки).
+  // Ширину смуги з підписами беремо з реального розміру картинки.
+  // CSS тут не помічник: фото масштабується по висоті, і його
+  // ширина стає відома лише після розкладки. Тому міряємо.
   const fit = () => {
-    const w = img.getBoundingClientRect().width || box.getBoundingClientRect().width;
+    const w = img.getBoundingClientRect().width;
     if (w) names.style.width = w + 'px';
   };
-  if (img.complete && img.naturalWidth) fit(); else img.addEventListener('load', fit);
-  img.addEventListener('error', () => {
-    console.warn('Фото команди не завантажилось: ' + img.src +
-      ' — перевір, чи лежить цей файл у assets/');
-    pic.remove();          // прибираємо значок «битої картинки»
-    stage.classList.add('no-photo');
-    fit();
-  });
+  img.addEventListener('load', fit);
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(img);
   addEventListener('resize', fit);
+  fit();
 }
 
 // ── Сліди на екрані завантаження ──────────────────────────────
@@ -475,36 +463,22 @@ function hook(key, el, src) {
   tryNext();
 }
 
-// ── Чи вимкнений звук ─────────────────────────────────────────
-// Потрібно main.js: звук ролика при втраті життя має слухатись
-// того самого вимикача Sound, що й музика.
-export function isMuted() { return muted; }
-
-// ── Приглушення музики на час ролика ──────────────────────────
-// Поки грає повноекранна заставка, музика рівня стихає, але не
-// зупиняється — інакше після ролика вона починалась би спочатку.
-// duckMusic(true) прибирає гучність, duckMusic(false) повертає.
-let ducked = false;
+// Притишити музику гри, поки на екрані ролик втрати життя.
+// Без цього зациклений трек рівня просто перекрикує «ой»:
+// у ролику перші пʼять секунд — тиха атмосфера, і лише в кінці
+// удар. На тлі музики його майже не чути.
 export function duckMusic(on) {
-  if (on === ducked) return;
-  ducked = !!on;
-  const M = musicConf();
-  const target = M.volume ?? 0.5;
-  Object.keys(players).forEach((key) => {
-    const el = players[key];
-    if (!el || el.paused || key === 'thunder') return;
-    clearInterval(fades[key]);
-    const to = ducked ? target * (M.duckTo ?? 0.15) : target;
-    const from = el.volume;
-    const steps = 10;
-    let i = 0;
-    fades[key] = setInterval(() => {
-      i++;
-      el.volume = Math.max(0, Math.min(1, from + (to - from) * i / steps));
-      if (i >= steps) clearInterval(fades[key]);
-    }, 30);
-  });
+  if (!players.game) return;
+  if (on) {
+    fadeOut('game');
+  } else if (current === 'game' && !muted) {
+    fadeIn('game');            // повертаємо з того ж місця, плавно
+  }
 }
+
+// Чи вимкнений звук. Потрібно main.js: ролик втрати життя має
+// мовчати, коли людина вимкнула звук у меню.
+export function isMuted() { return muted; }
 
 function paintMute(btn) {
   // Напис каже, що станеться від натиску, а не який стан зараз.

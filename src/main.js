@@ -4,7 +4,7 @@
 
 import { TUNING } from './tuning.js';
 import { start, undo, reset, getState, brushOptions, setBrush, setPaused } from './game.js';
-import { topScores, submitScore, qualifies, initDb, dbReady } from './db.js';
+import { topScores, submitScore, initDb, dbReady } from './db.js';
 import { initScreens, showScreen, currentScreen, isMuted, duckMusic } from './screens.js';
 
 // Позначка для сторожа запуску в index.html: код дожив досюди,
@@ -41,9 +41,6 @@ put('ask-note',  'textContent', t.askNote);
 put('ask-yes',   'textContent', t.askYes);
 put('ask-no',    'textContent', t.askNo);
 put('s-lost-title', 'textContent', t.lostTitle);
-put('lost-name',    'placeholder', t.namePlaceholder);
-put('lost-send',    'textContent', t.saveButton);
-put('win-menu',     'textContent', t.lostMenu);
 put('s-lost-note',  'textContent', t.lostNote);
 put('lost-again',   'textContent', t.lostAgain);
 put('lost-menu',    'textContent', t.lostMenu);
@@ -72,8 +69,14 @@ start(canvas, {
 initScreens({
   isGameReady: () => getState().phase !== 'loading',
 
-  onNewGame:   () => { hideAsk(); reset(); },  // очки з нуля, раунд стартує одразу
-  onLeaveGame: () => { hideAsk(); reset(); },  // вийшли в меню — раунд скидаємо
+  onNewGame:   () => { hideAsk(); reset(); setPaused(false); },
+
+  // Вийшли в меню — скидаємо раунд І СТАВИМО НА ПАУЗУ.
+  // Пауза тут не примха: reset() закінчується beginRound(), тобто
+  // одразу починає новий раунд. Без паузи гра тихо йшла б у фоні,
+  // поки людина ходить по меню: таймер тікав би, раунд провалювався,
+  // життя згорали — і ролик із «ой» лунав би просто в Credits.
+  onLeaveGame: () => { hideAsk(); reset(); setPaused(true); },
   onOpenLeaderboard: () => refreshBoard(),
 });
 
@@ -215,56 +218,31 @@ buildLives();
 // Якщо в tuning.js вказано відео, показуємо його поверх полотна.
 // Якщо картинку — її малює саме полотно, і сюди ми не лізем.
 const animEl = $('life-anim');
-let animIsVideo = false;
+const animSrc = (TUNING.lives?.anim || '');
+const animIsVideo = /\.(webm|mp4)$/i.test(animSrc);
 let animPlaying = false;
 
-// В tuning.js можна вписати одне ім'я або СПИСОК — беремо перший
-// файл, який справді лежить у папці assets. Так гра не ламається,
-// якщо ролик ще не доїхав від аніматора: просто покажеться
-// запасна картинка, а в консолі буде видно, чого бракує.
-pickExisting(TUNING.lives?.anim).then((src) => {
-  if (!src) {
-    console.warn('Заставки втрати життя немає: жодного з файлів ' +
-      JSON.stringify([].concat(TUNING.lives?.anim || [])) + ' немає в assets/');
-    animEl?.remove();
-    return;
-  }
-  animIsVideo = /\.(webm|mp4)$/i.test(src);
-  if (!animEl) return;
-  if (animIsVideo) animEl.src = src;
-  else animEl.remove();     // картинку малює саме полотно
-});
-
-// Бере перший файл зі списку, який справді існує.
-// Питаємо в сервера лише заголовок — саме файл при цьому не
-// качається, тож перевірка нічого не коштує.
-function pickExisting(list) {
-  const names = [].concat(list || []).filter(Boolean);
-  return names.reduce(
-    (chain, name) => chain.then((found) => found ||
-      fetch(name, { method: 'HEAD' }).then((r) => (r.ok ? name : null)).catch(() => null)),
-    Promise.resolve(null)
-  );
+if (animEl) {
+  if (animIsVideo) animEl.src = animSrc;
+  else animEl.remove();
 }
 
 // Звук до ролика — окремий канал. Якщо браузер його не пустить,
 // ролик усе одно покажеться: картинка від звуку не залежить.
 const animSound = $('life-sound');
 if (animSound) {
-  pickExisting(TUNING.lives?.animSound).then((src) => {
+  const src = TUNING.lives?.animSound || '';
+  if (src) {
+    animSound.src = src;
     // Найчастіша причина тиші — файл просто не доїхав у assets.
     // Хай про це буде видно в консолі, а не мовчазна загадка.
-    if (!src) {
-      if (TUNING.lives?.animSound) {
-        console.warn('Звук ролика не знайдено: ' +
-          JSON.stringify([].concat(TUNING.lives.animSound)) +
-          ' — перевір, чи лежить цей файл у assets/');
-      }
-      animSound.remove();
-      return;
-    }
-    animSound.src = src;
-  });
+    animSound.addEventListener('error', () => {
+      console.warn('Звук ролика не завантажився: ' + src +
+        ' — перевір, чи лежить цей файл у assets/');
+    });
+  } else {
+    animSound.remove();
+  }
 }
 
 function showLifeAnim(on) {
@@ -307,12 +285,12 @@ const timerEl = $('hud-timer');
 let resultShown = false;
 let lostShown = false;
 
-function render(s) {
-  const st = s || getState();
-
-  // Поточний етап видно в розмітці: зручно і для стилів, і щоб
-  // подивитись у девтулзах, на чому саме гра зупинилась.
-  document.body.dataset.phase = st.phase;
+function render(s) {
+  const st = s || getState();
+
+  // Поточний етап видно в розмітці: зручно і для стилів, і щоб
+  // подивитись у девтулзах, на чому саме гра зупинилась.
+  document.body.dataset.phase = st.phase;
 
   put('hud-round', 'textContent',
       fill(t.hudRound, { name: st.bootName, n: st.round + 1, total: st.total || 1 }));
@@ -352,14 +330,13 @@ function render(s) {
   // той, що стоїть трохи вище.
   lifeIcons.forEach((im, i) => im.classList.toggle('gone', i >= st.lives));
 
-  showLifeAnim(!!st.showAnim);
+  // Другий запобіжник: ролик і його звук — лише на екрані гри.
+  showLifeAnim(!!st.showAnim && currentScreen() === 'game');
 
   // Життя скінчились — вікно програшу
   if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {
     lostShown = true;
-    put('s-lost-score', 'textContent', st.score);
     showScreen('lost');
-    offerSave('lost', st.score);
   }
   if (st.phase !== 'lost') lostShown = false;
 
@@ -369,7 +346,6 @@ function render(s) {
     put('s-result-score', 'textContent', st.score);
     if (statusEl) statusEl.textContent = '';
     showScreen('result');
-    offerSave('win', st.score);
   }
   if (st.phase !== 'done') resultShown = false;
 }
@@ -382,38 +358,6 @@ $('lost-again')?.addEventListener('click', () => {
   showScreen('game');
   reset();
 });
-
-// ══════════════════════════════════════════════════════════════
-//  ЧИ ПРОПОНУВАТИ ВПИСАТИ ІМʼЯ
-//  Поле бачить лише той, хто обійшов останнього в таблиці.
-//  Решті просто показуємо рахунок — щоб не збирати сотні записів,
-//  які однаково нікуди не потраплять.
-// ══════════════════════════════════════════════════════════════
-
-const saveBoxes = { win: $('win-save'), lost: $('lost-save') };
-const missNote = $('s-win-miss');
-
-async function offerSave(which, score) {
-  // Спершу ховаємо все: поки база відповідає, у вікні не має
-  // блимати поле, яке за мить зникне.
-  Object.values(saveBoxes).forEach((b) => { if (b) b.hidden = true; });
-  if (missNote) missNote.hidden = true;
-  if (statusEl) statusEl.textContent = '';
-  const lostStatus = $('lost-status');
-  if (lostStatus) lostStatus.textContent = '';
-
-  const q = await qualifies(score);
-  const box = saveBoxes[which];
-  const hint = which === 'win' ? $('s-win-hint') : $('s-lost-hint');
-  if (hint) hint.textContent = fill(t.inTable, { places: q.places });
-
-  if (q.ok) {
-    if (box) box.hidden = false;
-  } else if (which === 'win' && missNote) {
-    missNote.textContent = fill(t.notInTable, { places: q.places });
-    missNote.hidden = false;
-  }
-}
 
 // ══════════════════════════════════════════════════════════════
 //  ЛІДЕРБОРД
@@ -463,25 +407,6 @@ saveBtn?.addEventListener('click', async () => {
   // Результат записано — гравцеві тут більше нічого робити,
   // повертаємо його в головне меню.
   setTimeout(() => { if (currentScreen() === 'result') showScreen('menu'); }, 900);
-});
-
-// Те саме, але з вікна програшу — там свої поле й кнопка.
-const lostName = $('lost-name'), lostSend = $('lost-send'), lostStatusEl = $('lost-status');
-if (lostName) {
-  lostName.value = localStorage.getItem('player') || '';
-  lostName.addEventListener('input', () => localStorage.setItem('player', lostName.value));
-}
-lostSend?.addEventListener('click', async () => {
-  const name = (lostName?.value || '').trim();
-  if (!name) { lostStatusEl.textContent = t.needName; lostName?.focus(); return; }
-  lostSend.disabled = true;
-  lostStatusEl.textContent = t.saving;
-  const res = await submitScore(name, getState().score);
-  lostSend.disabled = false;
-  lostStatusEl.textContent = res.ok ? t.saved : 'Не збереглось: ' + res.reason;
-  if (!res.ok) return;
-  refreshBoard();
-  setTimeout(() => { if (currentScreen() === 'lost') showScreen('menu'); }, 900);
 });
 
 // Базу підключаємо ПІСЛЯ запуску гри, щоб мертва мережа не блокувала картинку.
