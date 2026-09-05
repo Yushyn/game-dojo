@@ -967,6 +967,7 @@ function frame(now) {
 
   const drop = footDrop();
   if (drop !== null) {
+    drawDropShadow(drop);
     drawShadow(drop);
     drawFoot(drop);
   }
@@ -1253,6 +1254,42 @@ function drawClip(v, alpha) {
   ctx.restore();
 }
 
+// Тінь від ноги, що падає. Лежить НЕ під ногою, а там, куди нога
+// стане: на пʼєдесталі. Поки нога високо, тінь широка й бліда;
+// ближче до землі — вужча й темніша. Без цього нога не падає,
+// а просто проявляється в повітрі.
+function drawDropShadow(offsetY) {
+  const D = T.intro && T.intro.dropShadow;
+  if (!D || D.on === false || !footBB || !offsetY) return;
+
+  // offsetY відʼємний, поки нога вгорі, і 0 у мить приземлення
+  const from = Math.max(1, GAME.height * (T.intro.footDropFrom || 0.85));
+  const high = Math.max(0, Math.min(1, -offsetY / from));   // 1 вгорі, 0 внизу
+  if (high <= 0.001) return;
+
+  const cx = imgX + footBB.cx * imgScale;
+  const cy = imgY + (footBB.y1 + 1) * imgScale;
+  const grow = 1 + ((D.spread ?? 2.4) - 1) * high;
+  const rx = footBB.w * imgScale * (D.width ?? 0.62) * grow;
+  const ry = footBB.h * imgScale * (D.height ?? 0.055) * grow;
+  const a = (D.alpha ?? 0.55) * (1 - high * 0.75);
+
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
+  g.addColorStop(0, 'rgba(0, 0, 0, ' + a.toFixed(3) + ')');
+  g.addColorStop(0.6, 'rgba(0, 0, 0, ' + (a * 0.45).toFixed(3) + ')');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, ry / Math.max(rx, ry));
+  ctx.translate(-cx, -cy);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(rx, ry), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
 function drawShadow(offsetY) {
   const I = T.image;
@@ -1322,12 +1359,30 @@ function drawCutLine() {
   text('вище не рахується', GAME.width - 40, y - 18, T.compare.cutLineColor, 20, 'right');
 }
 
+// Чи вміє цей браузер розмивати на полотні. Перевіряємо один раз:
+// у Safari до 17-ї версії ctx.filter просто немає.
+let blurOk = null;
+function canBlur() {
+  if (blurOk === null) {
+    try {
+      ctx.filter = 'blur(2px)';
+      blurOk = ctx.filter === 'blur(2px)';
+      ctx.filter = 'none';
+    } catch (e) { blurOk = false; }
+    if (!blurOk) console.warn('Браузер не вміє розмиття на полотні — чобіт зʼявиться без нього');
+  }
+  return blurOk;
+}
+
 // Кладемо чобіт просто на стопу: обидві форми вписані в один квадрат,
 // рівно так само, як їх потім порівнює підрахунок.
-function drawBootOnFoot(picture, frame, alpha) {
+function drawBootOnFoot(picture, frame, alpha, blurPx) {
   if (!picture || !frame || alpha <= 0.001) return;
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
+  // Розмиття підтримують не всі браузери. Якщо ні — просто малюємо
+  // різко: перехід лишиться, тільки без розфокусу.
+  if (blurPx > 0.4 && canBlur()) ctx.filter = 'blur(' + blurPx.toFixed(1) + 'px)';
   ctx.drawImage(picture,
     imgX + frame.dx * imgScale, imgY + frame.dy * imgScale,
     picture.width * frame.k * imgScale, picture.height * frame.k * imgScale);
@@ -1353,6 +1408,46 @@ function drawIntro() {
     drawBootOnFoot(boot.img, roundFrame, stepAlpha(t, I.bootSeconds) * I.bootAlpha);
   }
 
+  drawCountdown(t);
+}
+
+// Зворотний відлік у центрі контуру: 3, 2, 1. Показує, скільки
+// лишилось дивитись, перш ніж контур зникне й піде робочий час.
+function drawCountdown(t) {
+  const I = T.intro, C = I.countdown;
+  if (!C || C.on === false) return;
+
+  const left = introTotal() - t;              // скільки лишилось вступу
+  if (left <= 0 || t < I.bootSeconds) return; // під час показу чобота мовчимо
+  const n = Math.ceil(left);
+  if (n <= 0) return;
+
+  // Центр беремо по рамці контуру — цифра стоїть саме в чоботі,
+  // а не десь посеред екрана.
+  const boot = boots[game.round];
+  const bb = boot.outline ? boot.outlineBBox : boot.bbox;
+  const fr = boot.outline ? roundOutline : roundFrame;
+  if (!bb || !fr) return;
+  const cx = imgX + (fr.dx + bb.cx * fr.k) * imgScale;
+  const cy = imgY + (fr.dy + (bb.bottom - bb.h / 2) * fr.k) * imgScale;
+
+  // Кожна цифра трохи наростає й тане — так видно, що це відлік,
+  // а не просто число, яке стрибає.
+  const frac = left - Math.floor(left);        // 1 на початку секунди, 0 у кінці
+  const size = (C.size || 180) * (0.86 + 0.14 * frac);
+  const a = Math.min(1, frac * 4);
+
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = 'bold ' + Math.round(size) + 'px Cinzel, Georgia, ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(3, size * 0.06);
+  ctx.strokeStyle = C.dim || 'rgba(0,0,0,0.85)';
+  ctx.strokeText(String(n), cx, cy);
+  ctx.fillStyle = C.color || '#f4eee2';
+  ctx.fillText(String(n), cx, cy);
+  ctx.restore();
 }
 
 function drawBootPreview() {
@@ -1371,10 +1466,27 @@ function drawBootPreview() {
 // Чобіт лягає поверх стопи: обидва вписані в один квадрат
 function drawResult() {
   const boot = boots[game.round];
-  // У кінці кладемо той самий контур, що показували у вступі.
-  // Синій силует лишається запасним варіантом для чобіт без контуру.
-  if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, T.preview.resultAlpha);
-  else drawBootOnFoot(boot.shape, roundFrame, T.preview.resultAlpha);
+  const R = T.reveal || {};
+  const t = (performance.now() - game.resultT0) / 1000;
+
+  const hold = R.outlineSeconds ?? 1.3;
+  const blur = Math.max(0.05, R.blurSeconds ?? 0.7);
+  const k = Math.max(0, Math.min(1, (t - hold) / blur));   // 0 контур, 1 чобіт
+
+  const outline = boot.outline || boot.shape;
+  const frame = boot.outline ? roundOutline : roundFrame;
+
+  // Контур тане і водночас розмивається — наче розфокусовується,
+  // а не просто зникає.
+  if (k < 1) {
+    const px = (R.blurMax ?? 28) * k * imgScale;
+    drawBootOnFoot(outline, frame, T.preview.resultAlpha * (1 - k), px);
+  }
+  // Справжній чобіт проявляється на його місці
+  if (k > 0) {
+    drawBootOnFoot(boot.img, roundFrame, (R.bootAlpha ?? 0.85) * k,
+                   (R.blurMax ?? 28) * (1 - k) * 0.5 * imgScale);
+  }
 
   // Панель із відсотком — по центру внизу, щоб не лізла на стопу
   // й не перекривала дівчинку праворуч.

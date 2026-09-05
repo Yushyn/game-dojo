@@ -283,9 +283,9 @@ function render(s) {
   });
 
   // Значки життів
-  // Гаснуть ЗЛІВА направо: перший втрачений — крайній лівий значок.
-  const lost = lifeIcons.length - st.lives;
-  lifeIcons.forEach((im, i) => im.classList.toggle('gone', i < lost));
+  // Гаснуть СПРАВА наліво: перший втрачений — правий значок,
+  // той, що стоїть трохи вище.
+  lifeIcons.forEach((im, i) => im.classList.toggle('gone', i >= st.lives));
 
   showLifeAnim(!!st.showAnim);
 
