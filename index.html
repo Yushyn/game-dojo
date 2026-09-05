@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 <!doctype html>
 <html lang="uk">
 <head>
@@ -626,6 +627,642 @@
     border-radius: 50%; background: #fff;
     box-shadow: 0 0 calc(var(--u) * 12) rgba(255,255,255,.75);
   }
+=======
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+>>>>>>> Stashed changes
+
+<!-- Safari на iPhone не вміє розгортати сторінки на весь екран.
+     Але вміє інше: якщо додати гру на домашній екран, вона
+     запуститься БЕЗ жодних панелей браузера і одразу горизонтально.
+     Оці чотири рядки — саме про це. -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cinderhella">
+<meta name="theme-color" content="#07060b">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<title>Game Dojo</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&display=swap">
+
+<style>
+  :root {
+    /* Стара палітра ігрової панелі — лишається як була */
+    --bg: #0c0b12;
+    --panel: #16141f;
+    --line: #2b2840;
+    --ink: #e8e6f0;
+    --dim: #8b869e;
+    --accent: #7bdff2;
+    --gold: #ffd166;
+
+    /* Палітра екранів меню: бальний зал при свічках */
+    --night:      #07060b;   /* глибокий чорний із синцем */
+    --velvet:     #180d18;   /* винний оксамит */
+    --candle:     #d8ab63;   /* золото свічки */
+    --candle-lit: #f4dfb4;   /* золото на світлі */
+    --bone:       #ece3d4;   /* колір тексту */
+    --ash:        #9a8f9c;   /* приглушений текст */
+    --rose:       #b4788c;   /* та сама рожева, що й опора */
+
+    --display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+    --prose:   'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    --mono:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body {
+    margin: 0;
+    -webkit-user-select: none; user-select: none;   /* щоб довгий тап не виділяв текст */
+    background: var(--night);
+    color: var(--bone);
+    font: 15px/1.5 var(--mono);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ══ ЕКРАНИ ══════════════════════════════════════════════════
+     Видно рівно один. Перемикає src/screens.js. */
+  /* Екрани сховані, показує потрібний src/screens.js.
+     ВИНЯТОК: перший, чорний екран має клас .on прямо в розмітці —
+     щоб його було видно навіть якщо код узагалі не запустився. */
+  .screen {
+    display: none;
+
+    /* --u — це ОДИН піксель макета 1920×1080. Усі розміри всередині
+       екранів міряються в ньому, тому інтерфейс масштабується цілком
+       і однаково на будь-якому пристрої. Рахується від найбільшого
+       кадру 16:9, який вміщається у вікно.
+
+       env(safe-area-*) — вирізи під камеру й смужку жестів.
+       На звичайних екранах усі нулі. */
+    --sx: calc(env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px));
+    --sy: calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
+    --u: calc(min(100vw - var(--sx), (100vh - var(--sy)) * 16 / 9) / 1920);
+  }
+  /* 100dvh, а не 100vh: на мобільних адресний рядок то зʼявляється,
+     то зникає, і 100vh залишає під ним смугу порожнечі. */
+  @supports (height: 100dvh) {
+    .screen { --u: calc(min(100vw - var(--sx), (100dvh - var(--sy)) * 16 / 9) / 1920); }
+  }
+  .screen.on { display: grid; place-items: center; height: 100dvh; padding: 0; }
+
+  /* Рамка 16:9 — той самий кадр, що й полотно гри,
+     щоб меню й гра не стрибали по розміру. */
+  /* Раніше тут була рамка 16:9 по центру. Тепер вона займає весь
+     екран будь-якої форми: відео й фон обрізаються по краях
+     (object-fit: cover), а меню стоїть відносно країв вікна. */
+  .frame {
+    position: relative;
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    border: 0;
+  }
+  .frame-art {
+    background: var(--night) center / cover no-repeat;
+  }
+  /* Затемнення під текст. Лежить над відео, але під написами,
+     і кліків не ловить. У відео є спалах блискавки — без цього
+     шару в цю мить меню стає нечитабельним. */
+  .frame-art::before {
+    content: '';
+    position: absolute; inset: 0; z-index: 1;
+    background:
+      linear-gradient(to bottom right, rgba(7,6,11,0) 42%, rgba(7,6,11,.78) 100%),
+      radial-gradient(115% 85% at 25% 35%, rgba(7,6,11,0) 35%, rgba(7,6,11,.72) 100%);
+  }
+  .frame-art > * { position: relative; z-index: 2; }
+  .frame-art > video.bg-video {
+    position: absolute; inset: 0; z-index: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  .veil { position: absolute; inset: 0; background: rgba(7,6,11,.78); }
+
+  /* ══ ЧОРНИЙ ЕКРАН «PRESS TO START» ═══════════════════════════
+     Чорне тло на весь екран, жодної графіки, одна кнопка. */
+  .screen-press.on { background: #000; padding: 0; }
+  .press {
+    all: unset;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: clamp(14px, 1.5vw, 20px);
+    letter-spacing: .32em;
+    color: #cfc9c0;
+    padding: 14px 20px;
+    animation: pulse 2.4s ease-in-out infinite;
+    transition: color .2s;
+  }
+  .press:hover, .press:focus-visible { color: #fff; animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .38 } }
+
+  .center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 0 8%;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(28px, 4.4vw, 62px);
+    letter-spacing: .1em;
+    color: var(--candle-lit);
+    margin: 0;
+    text-shadow: 0 0 42px rgba(216,171,99,.28), 0 2px 20px rgba(0,0,0,.9);
+  }
+  /* ══ ЗАВАНТАЖЕННЯ ════════════════════════════════════════════ */
+  .load-note {
+    font-family: var(--prose); font-style: italic;
+    font-size: clamp(15px, 1.5vw, 21px);
+    color: var(--ash); margin: 0;
+  }
+  /* Екран завантаження — теж суцільно чорний, без рамки:
+     червоне на чорному читається найкраще. */
+  .screen-loading.on { background: #000; padding: 0; }
+  .load-block { display: flex; flex-direction: column; align-items: center; }
+
+  /* Сліди. Кожен шар — та сама картинка, обрізана по одному
+     відбитку, і вони проявляються знизу вгору один за одним. */
+  .feet {
+    position: relative;
+    height: clamp(240px, 52vh, 460px);
+    aspect-ratio: 101 / 440;
+    margin-bottom: 28px;
+  }
+  .feet i {
+    position: absolute; inset: 0;
+    background: center / contain no-repeat;
+    opacity: 0;
+    /* світіння, щоб бліді відбитки не тонули в чорному */
+    filter: drop-shadow(0 0 9px rgba(255, 40, 40, .5));
+    animation: stepUp var(--cycle, 2.6s) linear infinite;
+    animation-delay: var(--delay, 0s);
+  }
+  @keyframes stepUp {
+    0%   { opacity: 0 }
+    9%   { opacity: 1 }
+    68%  { opacity: 1 }
+    84%  { opacity: 0 }
+    100% { opacity: 0 }
+  }
+  .load-pct {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .2em;
+    color: var(--ash); margin: 16px 0 0;
+  }
+
+  /* ══ ГОЛОВНЕ МЕНЮ ════════════════════════════════════════════ */
+  /* Права колона меню: лого, під ним три кнопки. */
+  .menu-col {
+    position: absolute; right: 4.5%; bottom: 6%;
+    display: flex; flex-direction: column; align-items: center;
+    gap: calc(var(--u) * 30);
+  }
+  .brand { display: block; }
+  .brand img {
+    display: block;
+    width: calc(var(--u) * 598);
+    height: auto;
+    filter: drop-shadow(0 6px 28px rgba(0,0,0,.85));
+  }
+  .menu { display: grid; gap: calc(var(--u) * 18); justify-items: center; }
+
+  /* Кнопка — картинка художника, розтягнута по правилу 88|100|88:
+     бокові краї лишаються як намальовані, тягнеться лише середина.
+     Тому напис будь-якої довжини не ламає рамку. */
+  .menu-item {
+    all: unset;
+    cursor: pointer;
+    --h: calc(var(--u) * 96);
+    box-sizing: border-box;
+    height: var(--h);
+    width: calc(var(--h) * 3.9);   /* ширина кнопки. Тягнеться лише середина */
+    display: flex; align-items: center; justify-content: center;
+    border-style: solid;
+    border-width: 0 calc(var(--h) * .7928);   /* 88 / 111 від висоти */
+    border-image-source: url('assets/MenuButton_default_88_100_88.png');
+    border-image-slice: 0 88 fill;
+    border-image-repeat: stretch;
+
+    font-family: var(--display);
+    font-size: calc(var(--h) * .26);
+    letter-spacing: .05em;
+    color: #e9dfcd;
+    text-shadow: 0 2px 6px rgba(0,0,0,.9);
+    white-space: nowrap;
+    transition: color .15s;
+  }
+  .menu-item:hover, .menu-item:focus-visible {
+    border-image-source: url('assets/MenuButton_holder_88_100_88.png');
+    color: #fff;
+  }
+  .menu-item:active {
+    border-image-source: url('assets/MenuButton_pressed_88_100_88.png');
+    color: #cfc3b2;
+  }
+
+  .tiny-row { display: flex; gap: calc(var(--u) * 24); }
+
+  /* Інструкція «як зробити повний екран на айфоні» */
+  #howto[hidden] { display: none; }
+  #howto {
+    position: fixed; inset: 0; z-index: 95;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(3, 2, 6, .88); padding: 5vh 6vw;
+  }
+  .howto-box {
+    max-width: 520px; width: 100%;
+    border: 1px solid rgba(216,171,99,.4);
+    background: #100a12; padding: 26px 28px;
+    max-height: 90dvh; overflow-y: auto;
+  }
+  .howto-box h2 {
+    font-family: var(--display); font-weight: 400;
+    font-size: 22px; letter-spacing: .1em; color: var(--candle-lit);
+    margin: 0 0 14px; text-transform: none;
+  }
+  .howto-lead, .howto-note {
+    font-family: var(--prose); font-size: 17px; color: var(--ash);
+    margin: 0 0 16px; font-style: italic;
+  }
+  .howto-note { margin: 16px 0 0; font-size: 15px; }
+  .howto-steps {
+    font-family: var(--prose); font-size: 18px; color: var(--bone);
+    margin: 0; padding-left: 1.2em; line-height: 1.7;
+  }
+  .howto-steps b { color: var(--candle-lit); font-weight: 500; }
+  .howto-close {
+    all: unset; cursor: pointer; display: block; margin: 22px 0 0;
+    font-family: var(--prose); font-size: 17px; letter-spacing: .1em;
+    color: var(--bone); border: 1px solid rgba(216,171,99,.45);
+    padding: 10px 26px; text-align: center;
+  }
+  .howto-close:hover, .howto-close:focus-visible {
+    color: var(--candle-lit); border-color: var(--candle);
+  }
+
+  /* Службові написи — навмисно тихі, щоб не сперечались із кнопками */
+  .mute {
+    all: unset; cursor: pointer;
+    font-family: var(--mono); font-size: calc(var(--u) * 15); letter-spacing: .16em;
+    color: rgba(236,227,212,.45);
+    padding: calc(var(--u) * 8) calc(var(--u) * 6);
+    transition: color .2s;
+  }
+  .mute:hover, .mute:focus-visible { color: var(--candle-lit); }
+
+
+  /* ══ ЛІДЕРБОРД ═══════════════════════════════════════════════
+     Рядок — картинка художника, розтягнута за правилом 84|100|30:
+     ліва сходинка й правий край лишаються як намальовані,
+     тягнеться тільки середина. Значок місця лягає зверху на ту
+     саму ліву сходинку — вона під нього й намальована.
+     Один розмір --rh керує всім: висотою рядка, значком, шрифтом. */
+  .lb {
+    position: absolute; right: 3%; top: 0; bottom: 0;
+    width: min(54%, 660px);
+    display: flex; flex-direction: column;
+    padding: 3.5vh 0 4vh;
+    --rh: clamp(34px, 6.4vh, 62px);
+  }
+  /* мʼяке затемнення під колоною, щоб написи не тонули в сцені */
+  .lb::before {
+    content: ''; position: absolute; inset: -2% -6% -2% -10%;
+    background: linear-gradient(to left, rgba(7,6,11,.72) 55%, rgba(7,6,11,0));
+    pointer-events: none;
+  }
+  .lb > * { position: relative; }
+
+  .lb-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 2vh; padding-left: 2px;
+  }
+  .lb-title {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(22px, 4.4vh, 46px);
+    letter-spacing: .04em; color: var(--candle-lit);
+    margin: 0; text-transform: none;
+    text-shadow: 0 3px 18px rgba(0,0,0,.9);
+  }
+  /* Кнопка закриття — картинка художника, два стани.
+     Хрестик малюється зверху, бо в самій картинці порожня
+     середина: так він лишається чітким на будь-якому розмірі. */
+  .lb-close {
+    all: unset; cursor: pointer; flex: none;
+    width: calc(var(--rh) * 1.05); height: calc(var(--rh) * 1.05);
+    display: flex; align-items: center; justify-content: center;
+    color: #cfc7b8;
+    background: url('assets/SquareButton_default.png') center / contain no-repeat;
+    transition: color .15s;
+  }
+  .lb-close svg { width: 42%; height: 42%; }
+  .lb-close:hover, .lb-close:focus-visible, .lb-close:active {
+    background-image: url('assets/SquareButton_pressed.png');
+    color: #fff;
+  }
+
+  .lb-list {
+    list-style: none; margin: 0; padding: 0 4px 0 0;
+    display: flex; flex-direction: column; gap: calc(var(--rh) * .16);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .lb-list::-webkit-scrollbar { width: 4px; }
+  .lb-list::-webkit-scrollbar-thumb { background: rgba(216,171,99,.35); }
+
+  .lb-row {
+    position: relative; flex: none;
+    height: var(--rh);
+    display: flex; align-items: center; gap: 12px;
+    box-sizing: border-box;
+    border-style: solid;
+    border-width: 0 calc(var(--rh) * .375) 0 calc(var(--rh) * 1.05);  /* 30 і 84 від 80 */
+    border-image-source: url('assets/Leaderboard_84_100_30.png');
+    border-image-slice: 0 30 0 84 fill;
+    border-image-repeat: stretch;
+    font-family: var(--prose);
+    font-size: calc(var(--rh) * .42);
+    color: var(--bone);
+  }
+  .lb-row .who { flex: 1; padding-left: calc(var(--rh) * .1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-row .pts { color: var(--candle-lit); font-variant-numeric: tabular-nums; }
+
+  /* Значок місця. Картинка — тільки рамка, тому темну заливку
+     робимо самі й обрізаємо тією ж восьмикутною формою. */
+  .lb-badge {
+    /* left рахується від ВНУТРІШНЬОГО краю рамки, а рамка тут —
+       та сама ліва сходинка завширшки 1.05 висоти. Тому зсуваємо
+       значок назад рівно на неї: він має лежати НА сходинці. */
+    position: absolute; top: 0; left: calc(var(--rh) * -1.05);
+    width: var(--rh); height: var(--rh);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--display); font-style: normal;
+    font-size: calc(var(--rh) * .44);
+    color: #cfc7b8;
+  }
+  .lb-badge::after {
+    content: ''; position: absolute; inset: 0;
+    background: center / contain no-repeat;
+  }
+  .lb-p1::after { background-image: url('assets/Place_1.png'); }
+  .lb-p2::after { background-image: url('assets/Place_2.png'); }
+  .lb-p3::after { background-image: url('assets/Place_3.png'); }
+  .lb-p1 { color: #f4dfb4; }
+  .lb-p2 { color: #dcdce2; }
+  .lb-p3 { color: #dda76d; }
+
+  .lb-empty {
+    font-family: var(--prose); font-style: italic; font-size: 19px;
+    color: var(--ash); padding: 18px 4px;
+  }
+
+  @media (max-height: 560px) {
+    .lb { width: min(62%, 560px); padding: 2vh 0; }
+  }
+
+
+  /* ══ АВТОРИ ══════════════════════════════════════════════════
+     Підписи стоять не рівною сіткою, а кожен під своєю людиною:
+     позиції взяті з tuning.js і виміряні по самій картинці.
+     Імʼя й прізвище в два рядки — так підпис удвічі вужчий і
+     сусіди не налізають один на одного навіть на телефоні. */
+  .cr {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 3.5vh 4% 2vh;
+    --rh: clamp(34px, 6.4vh, 62px);
+  }
+  .cr-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex: none;
+  }
+  .cr-title {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(22px, 4.4vh, 46px);
+    letter-spacing: .04em; color: var(--candle-lit);
+    margin: 0; text-transform: none;
+    text-shadow: 0 3px 18px rgba(0,0,0,.9);
+  }
+
+  .cr-photo {
+    position: relative; flex: 1; min-height: 0;
+    margin-top: 1.5vh;
+    display: flex; justify-content: center; align-items: flex-end;
+  }
+  /* Стовпчик, який звужується рівно до ширини фото. Підписи лежать
+     усередині нього, тому їхні відсотки завжди збігаються з людьми
+     на картинці — і на моніторі, і на телефоні. */
+  .cr-stage {
+    position: relative; height: 100%; max-width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .cr-stage picture {
+    flex: 1; min-height: 0;
+    display: flex; align-items: flex-end;
+  }
+  .cr-stage img {
+    display: block; height: 100%; width: auto; max-width: 100%;
+    object-fit: contain; object-position: bottom;
+    filter: drop-shadow(0 10px 30px rgba(0,0,0,.6));
+  }
+  /* Ширину задає src/screens.js — рівно по картинці. */
+  .cr-names {
+    position: relative; width: 100%; height: calc(var(--rh) * 1.2);
+    flex: none;
+  }
+  .cr-name {
+    position: absolute; top: .4em; transform: translateX(-50%);
+    text-align: center; line-height: 1.15;
+    font-family: var(--prose);
+    font-size: clamp(12px, 1.9vh, 20px);
+    color: var(--bone);
+    text-shadow: 0 2px 10px rgba(0,0,0,.95);
+    white-space: nowrap;
+  }
+  .cr-name b { display: block; font-weight: 500; color: var(--candle-lit); }
+  .cr-name i { display: block; font-style: normal; opacity: .85; }
+
+  /* ══ СТОРІНКИ ════════════════════════════ */
+  .page {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 5% 8%;
+  }
+  .page-title {
+    font-family: var(--display); font-weight: 400;
+    font-size: calc(var(--u) * 44);
+    letter-spacing: .14em; color: var(--candle-lit);
+    margin: 0 0 calc(var(--u) * 8);
+  }
+  .page-body {
+    width: min(calc(var(--u) * 760), 100%);
+    max-height: 62%;
+    overflow-y: auto;
+    margin: calc(var(--u) * 28) 0 0;
+  }
+  .board-big { list-style: none; margin: 0; padding: 0; font-family: var(--prose); }
+  .board-big li {
+    display: flex; gap: 16px; align-items: baseline;
+    padding: calc(var(--u) * 12) calc(var(--u) * 3);
+    border-bottom: 1px solid rgba(236,227,212,.1);
+    font-size: calc(var(--u) * 28);
+  }
+  .board-big .rank { color: var(--ash); width: 2em; font-family: var(--mono); font-size: .8em; }
+  .board-big .who  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-big .pts  { color: var(--candle); }
+  .board-big li.empty { color: var(--ash); border: 0; font-style: italic; justify-content: center; }
+
+  .credits-list { font-family: var(--prose); text-align: center; }
+  .credits-role {
+    font-family: var(--mono); font-size: calc(var(--u) * 15); letter-spacing: .22em;
+    color: var(--ash); margin: calc(var(--u) * 34) 0 calc(var(--u) * 10);
+  }
+  .credits-role:first-child { margin-top: 0; }
+  .credits-name { font-size: calc(var(--u) * 32); color: var(--bone); margin: calc(var(--u) * 4) 0; }
+
+  .back {
+    all: unset; cursor: pointer;
+    /* all:unset скидає і z-index, тому ставимо його явно —
+       інакше шар .page перекриває кнопку і клік не доходить. */
+    position: absolute; left: 5%; bottom: 8%; z-index: 2;
+    font-family: var(--prose); font-size: calc(var(--u) * 27);
+    color: var(--ash);
+    border-bottom: 1px solid transparent;
+    transition: color .25s, border-color .25s;
+  }
+  .back:hover, .back:focus-visible { color: var(--candle-lit); border-bottom-color: var(--candle); }
+
+  /* ══ ЕКРАН ГРИ ═══════════════════════════════════════════════
+     Полотно 1920×1080 вміщається у вікно цілком і по центру,
+     зайве місце лишається чорним — композиція ніколи не ріжеться.
+     Увесь інтерфейс лежить тонким шаром поверх нього й міряється
+     в тих самих --u, що й меню. */
+  .screen-game.on { background: #000; }
+  .play {
+    position: relative;
+    width:  calc(var(--u) * 1920);
+    height: calc(var(--u) * 1080);
+    overflow: hidden;
+  }
+  .play canvas {
+    display: block; width: 100%; height: 100%;
+    background: #12111a; border: 0;
+    cursor: crosshair;
+    touch-action: none;   /* щоб на планшеті не скролилась сторінка */
+  }
+
+  /* Шар інтерфейсу. Сам він кліків не ловить — тільки те, що
+     всередині, інакше не можна було б мняти стопу. */
+  .hud { position: absolute; inset: 0; pointer-events: none; font-family: var(--display); }
+  .hud > * { pointer-events: auto; }
+  .hud-text { text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 10) rgba(0,0,0,.95); }
+
+  .hud-left { position: absolute; left: calc(var(--u) * 294); top: calc(var(--u) * 38); }
+  .hud-round {
+    font-size: calc(var(--u) * 30); font-weight: 600; letter-spacing: .04em;
+    color: #f4eee2; margin: 0;
+  }
+  .hud-goal {
+    font-family: var(--prose);
+    font-size: calc(var(--u) * 25); color: #cec3b2;
+    margin: calc(var(--u) * 2) 0 0;
+  }
+
+  .hud-mid {
+    /* --bar-w — довжина смужки часу. Одне число на всі три шари:
+       рамку, вікно і заливку. Хочеш смужку іншої довжини — міняй тут. */
+    --bar-w: calc(var(--u) * 776);
+    position: absolute; left: 50%; top: calc(var(--u) * 16);
+    transform: translateX(-50%);
+    width: var(--bar-w); text-align: center;
+  }
+  .hud-timer {
+    font-size: calc(var(--u) * 34); font-weight: 600; letter-spacing: .03em;
+    color: #f4eee2; margin: 0;
+  }
+  .hud-timer.warn { color: #ff8f8f; }
+
+  /* Смужка часу. Рамка й заливка — картинки художника, розтягнуті
+     за правилом 30|120|30: кінчики лишаються як намальовані,
+     тягнеться лише середина. Заливка завжди намальована на всю
+     довжину, а видно з неї стільки, скільки минуло часу — тому
+     кінчик заливки виглядає правильно за будь-якого відсотка. */
+  .bar {
+    position: relative; margin: calc(var(--u) * 8) auto 0;
+    width: var(--bar-w); height: calc(var(--u) * 27);
+  }
+  /* Порожня рамка — окремим шаром на всю довжину смужки */
+  .bar::before {
+    content: ''; position: absolute; inset: 0;
+    border-style: solid; border-width: 0 calc(var(--u) * 27);
+    border-image-source: url('assets/Progressbar_fon_30_120_30.png');
+    border-image-slice: 0 30 fill;
+    border-image-repeat: stretch;
+  }
+  /* Вікно, крізь яке видно заливку. Його ширину міняє гра. */
+  .bar-clip {
+    position: absolute; inset: 0;
+    width: 0; overflow: hidden;
+    transition: width .12s linear;
+  }
+  /* Заливка завжди намальована на ВСЮ довжину смужки — просто
+     видно з неї стільки, скільки відкриває вікно вище. Тому її
+     кінчик виглядає правильно за будь-якого відсотка. */
+  .bar-fill {
+    position: absolute; left: 0; top: 0; height: 100%;
+    width: var(--bar-w);
+    border-style: solid; border-width: 0 calc(var(--u) * 27);
+    border-image-source: url('assets/Progressbar_fill_30_120_30.png');
+    border-image-slice: 0 30 fill;
+    border-image-repeat: stretch;
+  }
+
+  /* Восьмикутна кнопка. Одна й та сама картинка для хрестика
+     і для трьох кнопок пензля, різниця лише в розмірі. */
+  .sq {
+    all: unset; cursor: pointer;
+    box-sizing: border-box;
+    display: grid; place-items: center;
+    width: calc(var(--u) * 96); height: calc(var(--u) * 96);
+    background: url('assets/SquareButton_default.png') center / 100% 100% no-repeat;
+    transition: filter .15s;
+  }
+  .sq:hover, .sq:focus-visible { filter: brightness(1.3); }
+  .sq:active, .sq.on { background-image: url('assets/SquareButton_pressed.png'); }
+
+  /* pointer-events треба повторити: `all: unset` у .sq скидає його
+     на успадковане, тобто на none від .hud — і кнопка переставала
+     натискатись зовсім. */
+  .hud button, .hud-close { pointer-events: auto; }
+  .hud-close { position: absolute; right: calc(var(--u) * 26); top: calc(var(--u) * 12); }
+  .hud-close .x { position: relative; width: calc(var(--u) * 34); height: calc(var(--u) * 34); }
+  .hud-close .x::before, .hud-close .x::after {
+    content: ''; position: absolute; left: 0; top: 50%;
+    width: 100%; height: calc(var(--u) * 4);
+    background: #e7dcc8; border-radius: calc(var(--u) * 2);
+    box-shadow: 0 0 calc(var(--u) * 8) rgba(0,0,0,.9);
+  }
+  .hud-close .x::before { transform: translateY(-50%) rotate(45deg); }
+  .hud-close .x::after  { transform: translateY(-50%) rotate(-45deg); }
+
+  /* Три кнопки розміру пензля. Кружечок усередині малюється за
+     справжнім діаметром пензля з tuning.js — що бачиш, те й отримаєш. */
+  .brushes {
+    position: absolute; left: 50%; bottom: calc(var(--u) * 24);
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: calc(var(--u) * 18);
+  }
+  .brushes .sq { width: calc(var(--u) * 120); height: calc(var(--u) * 120); }
+  .brushes .dot {
+    border-radius: 50%; background: #fff;
+    box-shadow: 0 0 calc(var(--u) * 12) rgba(255,255,255,.75);
+  }
 
   /* ── Вікно «вийти в меню?» ──
      Лежить поверх усього ігрового екрана й притемнює його.
@@ -807,13 +1444,20 @@
 <section class="screen screen-page" data-screen="credits">
   <div class="frame frame-art" data-art>
     <div class="veil"></div>
-    <div class="page">
-      <h2 class="page-title" id="s-credits-title">Автори</h2>
-      <div class="page-body">
-        <div class="credits-list" id="credits-list"></div>
+    <div class="cr">
+      <div class="cr-head">
+        <h2 class="cr-title" id="s-credits-title">Credits</h2>
+        <button class="lb-close" data-go="menu" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" fill="none"/>
+          </svg>
+        </button>
       </div>
+
+      <!-- Фото і підписи будує src/screens.js за списком team із tuning.js -->
+      <div class="cr-photo" id="s-team"></div>
     </div>
-    <button class="back" data-go="menu">Назад</button>
   </div>
 </section>
 
@@ -837,16 +1481,12 @@
         </div>
       </div>
 
-      <div class="lives" id="lives"></div>
-
       <button class="sq hud-close" id="hud-close" aria-label="Вийти в меню">
         <span class="x"></span>
       </button>
 
       <div class="brushes" id="brushes"></div>
     </div>
-
-    <video class="life-anim" id="life-anim" muted playsinline hidden></video>
 
     <!-- Питання перед виходом. Поки воно відкрите, таймер стоїть. -->
     <div class="ask" id="ask" hidden>
@@ -862,23 +1502,7 @@
   </div>
 </section>
 
-<!-- ══ 7. ПРОГРАШ ══════════════════════════════════════════════
-     Показується сам, коли скінчились життя. -->
-<section class="screen screen-page" data-screen="lost">
-  <div class="frame frame-art" data-art>
-    <div class="veil"></div>
-    <div class="page">
-      <h2 class="page-title" id="s-lost-title">Гру програно</h2>
-      <p class="result-score"><span id="s-lost-note">Життя скінчились.</span></p>
-      <div class="ask-row">
-        <button class="menu-item" id="lost-again">Ще раз</button>
-        <button class="menu-item" data-go="menu" id="lost-menu">У меню</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══ 8. РЕЗУЛЬТАТ ═════════════════════════════════════════════
+<!-- ══ 7. РЕЗУЛЬТАТ ═════════════════════════════════════════════
      Показується сам, коли пройдено всі чоботи. Тут і рахунок,
      і поле для імені — на самому ігровому екрані їх більше немає. -->
 <section class="screen screen-page" data-screen="result">
