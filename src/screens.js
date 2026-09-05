@@ -83,24 +83,71 @@ function fillTexts() {
 
   document.querySelectorAll('.back').forEach((b) => { b.textContent = S.btnBack; });
 
-  // Автори: список беремо з tuning.js
-  const list = $('credits-list');
-  if (list) {
-    list.innerHTML = '';
-    (S.credits || []).forEach((group) => {
-      const role = document.createElement('p');
-      role.className = 'credits-role';
-      role.textContent = group.role;
-      list.appendChild(role);
+  buildTeam();
+}
 
-      (group.names || []).forEach((n) => {
-        const p = document.createElement('p');
-        p.className = 'credits-name';
-        p.textContent = n;
-        list.appendChild(p);
-      });
-    });
+// ── Автори: фото команди з підписами ──────────────────────────
+// Кожен підпис стоїть під своєю людиною. Відсотки лежать
+// у tuning.js, у списку team, і зняті з самої картинки.
+function buildTeam() {
+  const box = $('s-team');
+  const P = S.teamPhoto || {};
+  if (!box) return;
+
+  box.innerHTML = '';
+
+  // Підписи стоять у відсотках, тому їхня основа має збігатися
+  // з КАРТИНКОЮ, а не з екраном. Інакше на вузькому вікні, де
+  // фото вужче за контейнер, підписи розʼїжджаються з людьми.
+  const stage = document.createElement('div');
+  stage.className = 'cr-stage';
+
+  const pic = document.createElement('picture');
+  if (P.webp) {
+    const src = document.createElement('source');
+    src.srcset = P.webp; src.type = 'image/webp';
+    pic.appendChild(src);
   }
+  const img = document.createElement('img');
+  img.src = P.png || P.webp || '';
+  img.alt = S.creditsTitle || 'Credits';
+  pic.appendChild(img);
+  stage.appendChild(pic);
+
+  const names = document.createElement('div');
+  names.className = 'cr-names';
+  (S.team || []).forEach((p) => {
+    const el = document.createElement('span');
+    el.className = 'cr-name';
+    el.style.left = p.x + '%';
+
+    // Імʼя й прізвище окремими рядками — підпис виходить удвічі
+    // вужчим, і сусідні не налазять один на одного.
+    const parts = String(p.name).trim().split(/\s+/);
+    const first = document.createElement('b');
+    first.textContent = parts.shift();
+    el.appendChild(first);
+    if (parts.length) {
+      const rest = document.createElement('i');
+      rest.textContent = parts.join(' ');
+      el.appendChild(rest);
+    }
+    names.appendChild(el);
+  });
+  stage.appendChild(names);
+  box.appendChild(stage);
+
+  // Ширину смуги з підписами беремо з реального розміру картинки.
+  // CSS тут не помічник: фото масштабується по висоті, і його
+  // ширина стає відома лише після розкладки. Тому міряємо.
+  const fit = () => {
+    const w = img.getBoundingClientRect().width;
+    if (w) names.style.width = w + 'px';
+  };
+  img.addEventListener('load', fit);
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(img);
+  addEventListener('resize', fit);
+  fit();
 }
 
 // ── Сліди на екрані завантаження ──────────────────────────────

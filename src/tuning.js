@@ -458,16 +458,22 @@ export const TUNING = {
     muteOff: 'Sound: turn off',   // видно, коли звук грає
 
     leaderboardTitle: 'Leaderboard',
-    creditsTitle:     'Автори',
+    creditsTitle:     'Credits',
 
-    // Впиши сюди справжні імена. Груп може бути скільки завгодно,
-    // імен у групі — теж.
-    credits: [
-      { role: 'Гейм-дизайн', names: ['Імʼя Прізвище', 'Імʼя Прізвище',
-                                     'Імʼя Прізвище', 'Імʼя Прізвище'] },
-      { role: 'UI / UX',     names: ['Імʼя Прізвище'] },
-      { role: 'Код',         names: ['Claude'] },
+    // Команда на екрані Credits. Порядок — зліва направо, як на фото.
+    // x — де на картинці стоїть ця людина, у відсотках ширини.
+    // Числа зняті з самої картинки по головах, а не на око: якщо
+    // заміните фото, їх треба перевірити.
+    team: [
+      { name: 'Yan Yushyn',          x: 21.6 },
+      { name: 'Anastasiia Boiarska', x: 34.1 },
+      { name: 'Vladyslav Hyryk',     x: 51.2 },
+      { name: 'Anna Khamietova',     x: 69.0 },
+      { name: 'Rodion Baskakov',     x: 82.6 },
     ],
+
+    // Фото команди. Два файли — легкий webp і png про запас.
+    teamPhoto: { webp: 'assets/Credits_team.webp', png: 'assets/Credits_team.png' },
   },
 
   // ── ТЕКСТИ ───────────────────────────────────────────────────

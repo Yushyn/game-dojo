@@ -395,7 +395,63 @@
     .lb { width: min(62%, 560px); padding: 2vh 0; }
   }
 
-  /* ══ СТОРІНКИ (автори) ════════════════════════════ */
+
+  /* ══ АВТОРИ ══════════════════════════════════════════════════
+     Підписи стоять не рівною сіткою, а кожен під своєю людиною:
+     відсотки лежать у tuning.js і зняті з самої картинки по
+     головах. Імʼя й прізвище в два рядки — так підпис удвічі
+     вужчий і сусіди не налазять один на одного на телефоні. */
+  .cr {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 3.5vh 4% 2vh;
+    --rh: clamp(34px, 6.4vh, 62px);
+  }
+  .cr-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex: none;
+  }
+  .cr-title {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(22px, 4.4vh, 46px);
+    letter-spacing: .04em; color: var(--candle-lit);
+    margin: 0; text-transform: none;
+    text-shadow: 0 3px 18px rgba(0,0,0,.9);
+  }
+  .cr-photo {
+    position: relative; flex: 1; min-height: 0;
+    margin-top: 1.5vh;
+    display: flex; justify-content: center; align-items: flex-end;
+  }
+  /* Стовпчик, який звужується рівно до ширини фото. */
+  .cr-stage {
+    position: relative; height: 100%; max-width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .cr-stage picture { flex: 1; min-height: 0; display: flex; align-items: flex-end; }
+  .cr-stage img {
+    display: block; height: 100%; width: auto; max-width: 100%;
+    object-fit: contain; object-position: bottom;
+    filter: drop-shadow(0 10px 30px rgba(0,0,0,.6));
+  }
+  /* Ширину задає src/screens.js — рівно по картинці. */
+  .cr-names {
+    position: relative; width: 100%; height: calc(var(--rh) * 1.2);
+    flex: none;
+  }
+  .cr-name {
+    position: absolute; top: .4em; transform: translateX(-50%);
+    text-align: center; line-height: 1.15;
+    font-family: var(--prose);
+    font-size: clamp(12px, 1.9vh, 20px);
+    color: var(--bone);
+    text-shadow: 0 2px 10px rgba(0,0,0,.95);
+    white-space: nowrap;
+  }
+  .cr-name b { display: block; font-weight: 500; color: var(--candle-lit); }
+  .cr-name i { display: block; font-style: normal; opacity: .85; }
+
+  /* ══ СТОРІНКИ ════════════════════════════════════ */
   .page {
     position: absolute; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -807,13 +863,20 @@
 <section class="screen screen-page" data-screen="credits">
   <div class="frame frame-art" data-art>
     <div class="veil"></div>
-    <div class="page">
-      <h2 class="page-title" id="s-credits-title">Автори</h2>
-      <div class="page-body">
-        <div class="credits-list" id="credits-list"></div>
+    <div class="cr">
+      <div class="cr-head">
+        <h2 class="cr-title" id="s-credits-title">Credits</h2>
+        <button class="lb-close" data-go="menu" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" fill="none"/>
+          </svg>
+        </button>
       </div>
+
+      <!-- Фото і підписи будує src/screens.js за списком team із tuning.js -->
+      <div class="cr-photo" id="s-team"></div>
     </div>
-    <button class="back" data-go="menu">Назад</button>
   </div>
 </section>
 
