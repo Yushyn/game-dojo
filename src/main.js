@@ -5,7 +5,7 @@
 import { TUNING } from './tuning.js';
 import { start, undo, reset, getState, brushOptions, setBrush, setPaused } from './game.js';
 import { topScores, submitScore, initDb, dbReady } from './db.js';
-import { initScreens, showScreen, currentScreen } from './screens.js';
+import { initScreens, showScreen, currentScreen, isMuted, duckMusic } from './screens.js';
 
 // Позначка для сторожа запуску в index.html: код дожив досюди,
 // значить, усі файли на місці.
@@ -221,6 +221,24 @@ if (animEl) {
   else animEl.remove();
 }
 
+// Звук до ролика — окремий канал. Якщо браузер його не пустить,
+// ролик усе одно покажеться: картинка від звуку не залежить.
+const animSound = $('life-sound');
+if (animSound) {
+  const src = TUNING.lives?.animSound || '';
+  if (src) {
+    animSound.src = src;
+    // Найчастіша причина тиші — файл просто не доїхав у assets.
+    // Хай про це буде видно в консолі, а не мовчазна загадка.
+    animSound.addEventListener('error', () => {
+      console.warn('Звук ролика не завантажився: ' + src +
+        ' — перевір, чи лежить цей файл у assets/');
+    });
+  } else {
+    animSound.remove();
+  }
+}
+
 function showLifeAnim(on) {
   if (!animIsVideo || !animEl || on === animPlaying) return;
   animPlaying = on;
@@ -228,9 +246,28 @@ function showLifeAnim(on) {
   if (on) {
     try { animEl.currentTime = 0; } catch (e) {}
     animEl.play().catch(() => {});
+    duckMusic(true);      // музика рівня стихає, щоб було чути ролик
+    playAnimSound();
   } else {
     animEl.pause();
+    stopAnimSound();
+    duckMusic(false);     // і повертається, коли ролик скінчився
   }
+}
+
+function playAnimSound() {
+  const a = $('life-sound');
+  if (!a || !a.src || isMuted()) return;   // вимикач Sound глушить і його
+  a.volume = TUNING.lives?.animSoundVolume ?? 0.9;
+  try { a.currentTime = 0; } catch (e) {}
+  a.play().catch(() => {});
+}
+
+function stopAnimSound() {
+  const a = $('life-sound');
+  if (!a) return;
+  a.pause();
+  try { a.currentTime = 0; } catch (e) {}
 }
 
 // ══════════════════════════════════════════════════════════════

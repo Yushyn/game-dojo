@@ -463,6 +463,23 @@ function hook(key, el, src) {
   tryNext();
 }
 
+// Притишити музику гри, поки на екрані ролик втрати життя.
+// Без цього зациклений трек рівня просто перекрикує «ой»:
+// у ролику перші пʼять секунд — тиха атмосфера, і лише в кінці
+// удар. На тлі музики його майже не чути.
+export function duckMusic(on) {
+  if (!players.game) return;
+  if (on) {
+    fadeOut('game');
+  } else if (current === 'game' && !muted) {
+    fadeIn('game');            // повертаємо з того ж місця, плавно
+  }
+}
+
+// Чи вимкнений звук. Потрібно main.js: ролик втрати життя має
+// мовчати, коли людина вимкнула звук у меню.
+export function isMuted() { return muted; }
+
 function paintMute(btn) {
   // Напис каже, що станеться від натиску, а не який стан зараз.
   btn.textContent = muted
