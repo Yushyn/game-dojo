@@ -12,3 +12,18 @@
   for = "/src/*"
   [headers.values]
     Cache-Control = "no-cache"
+
+# index.html теж має бути no-cache, і це не дрібниця.
+# Раніше тут стояв лише /src/*: скрипти оновлювались, а сама
+# сторінка бралася з кешу браузера. Через це новий рядок HUD
+# (Total score) не зʼявлявся — код писав у елемент, якого в старій
+# закешованій сторінці ще не було, і мовчки нічого не робив.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"

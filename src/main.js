@@ -23,9 +23,24 @@ function fill(str, vals) {
 function hideAsk() { const b = document.getElementById('ask'); if (b) b.hidden = true; }
 
 const missing = [];
+const warned = new Set();
 function put(id, prop, value) {
   const el = $(id);
-  if (!el) { missing.push(id); return; }
+  if (!el) {
+    missing.push(id);
+    // Про кожен відсутній елемент кажемо ОДИН раз, зате завжди —
+    // навіть якщо його шукають уже під час гри, а не на старті.
+    // Саме так ловиться найпідступніший випадок: скрипти свіжі, а
+    // index.html браузер узяв зі старого кешу. Код тоді пише в
+    // елемент, якого немає, і мовчки нічого не відбувається.
+    if (!warned.has(id)) {
+      warned.add(id);
+      console.error('У index.html немає елемента «' + id + '». ' +
+        'Найчастіше це старий index.html у кеші браузера — ' +
+        'онови сторінку з Ctrl+Shift+R (на Mac ⌘+Shift+R).');
+    }
+    return;
+  }
   if (value !== undefined) el[prop] = value;
 }
 
