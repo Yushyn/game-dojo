@@ -204,7 +204,9 @@ function preloadButtons() {
 // і зрозуміти чому було неможливо. Тепер вона грає в будь-якому разі.
 const MUSIC_FALLBACK = {
   menu:        'assets/menu-music.mp3',
-  game:        'assets/game-music.mp3',
+  // Кілька імен на випадок, якщо файл поклали під іншою назвою:
+  // пробуємо по черзі, беремо перше, що справді відкрилось.
+  game:        ['assets/game-music.mp3', 'assets/fit.mp3'],
   volume:      0.5,
   fadeSeconds: 1.5,
   showMute:    true,
@@ -217,10 +219,18 @@ const MUTE_KEY = 'music-muted';
 
 function musicConf() {
   const M = S.music || {};
+
+  // Імена файлів складаємо, а не заміняємо: спершу пробуємо те, що
+  // написано в tuning.js, потім запасні. Інакше одне ім'я з tuning
+  // перекривало б увесь список, і при друкарській помилці чи іншій
+  // назві файлу музика мовчала б без пояснень.
+  const both = (a, b) => [...new Set([].concat(a || [], b || []))];
+
   return {
     ...MUSIC_FALLBACK,
     ...M,
-    menu: M.menu || M.src || MUSIC_FALLBACK.menu,   // src — стара назва поля
+    menu: both(M.menu || M.src, MUSIC_FALLBACK.menu),   // src — стара назва поля
+    game: both(M.game,          MUSIC_FALLBACK.game),
   };
 }
 
@@ -247,10 +257,27 @@ function prepMusic() {
 
 function hook(key, el, src) {
   if (!el || !src) return;
-  el.src = src;
+
+  const list = Array.isArray(src) ? src.slice() : [src];
   el.loop = true;
   el.volume = 0;
   players[key] = el;
+
+  // Якщо файлу за першим іменем немає — тихо пробуємо наступне.
+  // Раніше в такому разі музика просто мовчала, і зрозуміти чому
+  // можна було лише через вкладку Network.
+  let i = 0;
+  const tryNext = () => {
+    if (i >= list.length) {
+      console.warn('Музика «' + key + '» не знайдена. Шукав: ' + list.join(', '));
+      delete players[key];
+      return;
+    }
+    el.src = list[i++];
+    el.load();
+  };
+  el.addEventListener('error', tryNext);
+  tryNext();
 }
 
 function paintMute(btn) {

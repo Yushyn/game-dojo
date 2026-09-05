@@ -166,7 +166,7 @@
   .brand { display: block; }
   .brand img {
     display: block;
-    width: clamp(240px, 34vh, 460px);
+    width: clamp(312px, 44vh, 598px);   /* на 30% більший за початковий */
     height: auto;
     filter: drop-shadow(0 6px 28px rgba(0,0,0,.85));
   }
@@ -412,7 +412,7 @@
 
 <!-- Музика меню. Джерело підставляє src/screens.js. -->
 <audio id="s-music" loop preload="auto"></audio>
-<audio id="s-music-game" loop preload="none"></audio>
+<audio id="s-music-game" loop preload="auto"></audio>
 
 <!-- ══ 4. ЛІДЕРБОРД ═════════════════════════════════════════════ -->
 <section class="screen screen-page" data-screen="leaderboard">
