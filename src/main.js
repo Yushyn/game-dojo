@@ -333,6 +333,73 @@ function stopAnimSound() {
   try { soundEl.currentTime = 0; } catch (e) {}
 }
 
+// ── Переможна катсцена ────────────────────────────────────────
+// Влаштована так само, як ролик втрати життя, і користується тим
+// самим затемненням. Різниця лише в тому, що елементи свої: якби
+// вони були спільні, ролик перемоги перетирав би src ролика
+// смерті й другий програш показував би не те відео.
+const winList   = [].concat(TUNING.win?.anim || []);
+const winSounds = [].concat(TUNING.win?.animSound || []);
+const winEl     = $('win-anim');
+const winSoundEl = $('win-sound');
+let winPlaying = false;
+
+if (winEl && !winList.some(isVideo)) winEl.remove();
+if (winSoundEl && !winSounds.length) winSoundEl.remove();
+
+winList.concat(winSounds).forEach((src) => {
+  if (!src) return;
+  const el = document.createElement(isVideo(src) ? 'video' : 'audio');
+  el.preload = 'auto';
+  el.src = src;
+});
+
+// Свій таймер, а НЕ спільний fadeTimer. Це не дрібниця: перемога
+// може настати одразу після ролика втрати життя (гравець втратив
+// життя на останньому чоботі). Ролик смерті на виході вмикає
+// затемнення й через 30 мс його знімає — і якби ми тут чистили той
+// самий таймер, зняття не сталося б, а чорний шар лишився б на
+// весь екран до кінця катсцени.
+let winFadeTimer = 0;
+
+function showWinAnim(on) {
+  if (on === winPlaying) return;
+  const src = pick(winList, 0);
+  winPlaying = on;
+  clearTimeout(winFadeTimer);
+
+  if (on) {
+    duckMusic(true);
+    if (winEl && isVideo(src)) {
+      fadeEl?.classList.add('on');
+      winFadeTimer = setTimeout(() => {
+        winEl.hidden = false;
+        if (winEl.getAttribute('src') !== src) winEl.src = src;
+        try { winEl.currentTime = 0; } catch (e) {}
+        winEl.play().catch(() => {});
+        fadeEl?.classList.remove('on');
+      }, fadeMs);
+    }
+    playWinSound();
+  } else {
+    if (winEl) { winEl.hidden = true; winEl.pause(); }
+    if (winSoundEl) {
+      winSoundEl.pause();
+      try { winSoundEl.currentTime = 0; } catch (e) {}
+    }
+    duckMusic(false);
+  }
+}
+
+function playWinSound() {
+  const src = pick(winSounds, 0);
+  if (!winSoundEl || !src || isMuted()) return;
+  if (winSoundEl.getAttribute('src') !== src) winSoundEl.src = src;
+  winSoundEl.volume = TUNING.win?.animSoundVolume ?? 0.9;
+  try { winSoundEl.currentTime = 0; } catch (e) {}
+  winSoundEl.play().catch(() => {});
+}
+
 // ══════════════════════════════════════════════════════════════
 //  ПОКАЗ СТАНУ
 // ══════════════════════════════════════════════════════════════
@@ -374,6 +441,7 @@ function render(s) {
 
   // Другий запобіжник: ролик і його звук — лише на екрані гри.
   showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);
+  showWinAnim(!!st.showWin && currentScreen() === 'game');
 
   // Життя скінчились — вікно програшу
   if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {

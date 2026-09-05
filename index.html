@@ -545,7 +545,8 @@
 
      ховається: вона має бути справді на весь екран. */
 
-  body[data-phase="anim"] .hud { opacity: 0; pointer-events: none; }
+  body[data-phase="anim"] .hud,
+  body[data-phase="winanim"] .hud { opacity: 0; pointer-events: none; }
   .hud > * { pointer-events: auto; }
   .hud-text { text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 10) rgba(0,0,0,.95); }
 
@@ -957,6 +958,10 @@
     </div>
 
     <video class="life-anim" id="life-anim" muted playsinline hidden></video>
+    <!-- Переможна катсцена. Окремий елемент, щоб ролик перемоги
+         й ролик втрати життя не перетирали src один одному. -->
+    <video class="life-anim" id="win-anim" muted playsinline hidden></video>
+    <audio id="win-sound" preload="auto"></audio>
     <!-- Звук до ролика окремим каналом, а не всередині відео.
          Так вимикач Sound глушить його разом із музикою, а якщо
          браузер звук не пустить — ролик усе одно покажеться. -->

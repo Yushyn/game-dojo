@@ -76,11 +76,12 @@ let pedImage = null;     // окремий шар пʼєдестала пове�
 let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
 let footImages = [];     // по одній картинці ноги на кожне життя
 let animImage = null;    // повноекранна заглушка при втраті життя
+let winImage  = null;    // те саме, але для переможної катсцени
 let tintBuf = null, tintCtxCache = null;   // полотно для червоної ноги
 
 // ── Хід гри ───────────────────────────────────────────────────
 const game = {
-  // loading | idle | intro | play | result | dying | anim | done | lost
+  // loading | idle | intro | play | result | dying | anim | winanim | done | lost
   phase: 'loading',
   round: 0,
   score: 0,
@@ -92,6 +93,7 @@ const game = {
   lives: 0,           // скільки життів лишилось
   lifeIndex: 0,       // якою ногою граємо: 0, 1, ...
   dieT0: 0,           // мить, коли почалась втрата життя
+  winT0: 0,           // мить, коли почалась переможна катсцена
   lastLife: false,    // це була остання — далі вікно програшу
   paused: false,      // час стоїть: відкрите вікно «вийти в меню?»
   resultT0: 0,        // мить, коли показали результат раунду
@@ -147,6 +149,12 @@ export function start(canvasEl, callbacks) {
   [].concat(T.lives?.anim || []).filter((A) => A && !/\.(webm|mp4)$/i.test(A))
     .reduce((chain, A) => chain.then((got) => got ||
       loadImage(A).then((im) => { animImage = im; return true; }).catch(() => false)),
+      Promise.resolve(false));
+
+  // Те саме для переможної катсцени
+  [].concat(T.win?.anim || []).filter((A) => A && !/\.(webm|mp4)$/i.test(A))
+    .reduce((chain, A) => chain.then((got) => got ||
+      loadImage(A).then((im) => { winImage = im; return true; }).catch(() => false)),
       Promise.resolve(false));
   if (T.pedestal?.show) {
     loadImage(T.pedestal.src)
@@ -780,7 +788,12 @@ function afterResult() {
 // Куди йти, коли поточний чобіт позаду
 function nextBootOrWin() {
   if (game.round + 1 < boots.length) return beginRound(game.round + 1);
-  game.phase = 'done';
+  // Чоботи скінчились — це перемога. Спершу повноекранна катсцена,
+  // і лише після неї той самий екран результату, що був досі.
+  // Якщо катсцену вимкнено, йдемо на результат одразу, як раніше.
+  if (T.win?.on === false) { game.phase = 'done'; notify(); return; }
+  game.winT0 = performance.now();
+  game.phase = 'winanim';
   notify();
 }
 
@@ -837,6 +850,7 @@ export function reset() {
   game.paused = false;
   game.lives = Math.max(1, T.lives?.count ?? 2);
   game.lastLife = false;
+  game.winT0 = 0;
 
   // Повертаємо першу ногу, якщо грали другою
   if (footImages.length && game.lifeIndex !== 0) {
@@ -883,6 +897,16 @@ function updateTimers(now) {
   if (game.phase === 'anim') {
     game.canEdit = false;
     if ((now - game.dieT0) / 1000 >= (T.lives?.animSeconds ?? 2.5)) afterAnim();
+    return;
+  }
+  // Переможна катсцена. Догралась — далі все як було: екран
+  // результату, рахунок, лідерборд.
+  if (game.phase === 'winanim') {
+    game.canEdit = false;
+    if ((now - game.winT0) / 1000 >= (T.win?.animSeconds ?? 4)) {
+      game.phase = 'done';
+      notify();
+    }
     return;
   }
   if (game.phase !== 'play') { game.canEdit = false; return; }
@@ -945,6 +969,7 @@ export function getState() {
     livesMax: Math.max(1, T.lives?.count ?? 2),
     lifeIndex: game.lifeIndex,
     showAnim: game.phase === 'anim',
+    showWin:  game.phase === 'winanim',
     pass: boots[game.round]?.pass ?? T.round.passPercent,
     brush: brushIndex,
     paused: game.paused,
@@ -992,6 +1017,7 @@ function frame(now) {
   if (game.phase === 'dying') drawBootHold();
   if (game.canEdit && pointerInside) drawBrush();
   if (game.phase === 'anim') drawLifeAnim();
+  if (game.phase === 'winanim') drawWinAnim();
 }
 
 // Нога на пʼєдесталі. При втраті життя вона блідне й заливається
@@ -1049,6 +1075,28 @@ function tintCtx() {
 
 // Повноекранна заставка при втраті життя. Відео підставляє
 // сторінка, тут малюємо картинку.
+// Переможна катсцена. Влаштована так само, як заставка втрати
+// життя: якщо в tuning.js вписано відео — його показує сторінка,
+// якщо картинку — малюємо тут, вписуючи цілком.
+function drawWinAnim() {
+  const W = T.win || {};
+  const t = (performance.now() - game.winT0) / 1000;
+  const total = Math.max(0.2, W.animSeconds ?? 4);
+  const fade = Math.min(0.5, total / 4);
+  const a = Math.max(0, Math.min(1, Math.min(t / fade, (total - t) / fade)));
+
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = W.background || '#f4efe6';
+  ctx.fillRect(0, 0, GAME.width, GAME.height);
+  if (winImage) {
+    const k = Math.min(GAME.width / winImage.width, GAME.height / winImage.height);
+    const w = winImage.width * k, h = winImage.height * k;
+    ctx.drawImage(winImage, (GAME.width - w) / 2, (GAME.height - h) / 2, w, h);
+  }
+  ctx.restore();
+}
+
 function drawLifeAnim() {
   const L = T.lives || {};
   const t = (performance.now() - game.dieT0) / 1000;
