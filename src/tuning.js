@@ -48,8 +48,8 @@ export const TUNING = {
   boots: [
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
       name: 'Коричневий на підборах', passPercent: 78 },
-    { src: 'assets/boot2.png',
-      name: 'Світлий чобіток',        passPercent: 80 },
+    { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
+      name: 'Каченя',                 passPercent: 73 },
   ],
 
   // ── ВСТУП РАУНДУ ─────────────────────────────────────────────
