@@ -60,6 +60,7 @@ export function initScreens(callbacks) {
   paintArt();
   buildFeet();
   prepMusic();
+  prepFullscreen();
   preloadButtons();
   bindButtons();
 
@@ -71,6 +72,7 @@ function fillTexts() {
   const set = (id, value) => { const el = $(id); if (el && value !== undefined) el.textContent = value; };
 
   set('s-press',         S.btnPressStart);
+  set('s-rotate-text',   S.rotateHint);
   set('s-load-note',     S.loadingText);
   set('s-go-game',       S.btnNewGame);
   set('s-go-board',      S.btnLeaderboard);
@@ -180,6 +182,66 @@ function toggleVideo(name) {
   } else {
     vid.pause();
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ПОВНИЙ ЕКРАН
+//  Браузер дозволяє розгорнутись лише у відповідь на дію людини.
+//  Такою дією є клік по PRESS TO START — іншої нагоди не буде,
+//  тому просимо саме там.
+//
+//  На iPhone повний екран для сторінок не працює взагалі — це
+//  обмеження Safari, обійти його нічим. Там гра просто займає
+//  все вікно, а якщо телефон тримають вертикально, показується
+//  прохання повернути його.
+// ══════════════════════════════════════════════════════════════
+
+function goFullscreen() {
+  const el = document.documentElement;
+  const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!ask || document.fullscreenElement) return;
+
+  const p = ask.call(el, { navigationUI: 'hide' });
+  if (p && p.then) {
+    p.then(lockLandscape).catch(() => {});   // відмовили — не біда, працюємо у вікні
+  } else {
+    setTimeout(lockLandscape, 200);
+  }
+}
+
+// Поворот екрана вміє замикати лише Android. Safari й десктоп
+// просто відмовляють, і це нормально.
+function lockLandscape() {
+  try {
+    const o = screen.orientation;
+    if (o && o.lock) o.lock('landscape').catch(() => {});
+  } catch (e) { /* не підтримується */ }
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+  } else {
+    goFullscreen();
+  }
+}
+
+function prepFullscreen() {
+  const btn = $('s-full');
+  if (!btn) return;
+
+  const ask = document.documentElement.requestFullscreen ||
+              document.documentElement.webkitRequestFullscreen;
+  if (!ask) { btn.remove(); return; }      // iPhone — кнопка тут тільки б дратувала
+
+  const paint = () => {
+    btn.textContent = (document.fullscreenElement || document.webkitFullscreenElement)
+      ? (S.fullscreenOff || 'Windowed')
+      : (S.fullscreenOn  || 'Fullscreen');
+  };
+  paint();
+  document.addEventListener('fullscreenchange', paint);
+  btn.addEventListener('click', (e) => { e.stopPropagation(); toggleFullscreen(); });
 }
 
 // ── Наведення й натиск ────────────────────────────────────────
@@ -425,8 +487,8 @@ function bindButtons() {
 
 function go(name) {
   // Перший клік по сторінці — єдина мить, коли браузер дозволяє
-  // увімкнути звук. Не проґав її.
-  if (current === 'press') unlockAudio();
+  // і увімкнути звук, і розгорнутись на весь екран. Не проґав її.
+  if (current === 'press') { unlockAudio(); goFullscreen(); }
 
   if (name === 'game') {
     gameEverOpened = true;

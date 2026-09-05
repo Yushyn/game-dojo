@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Game Dojo</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,9 +35,10 @@
     --mono:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
   body {
     margin: 0;
+    -webkit-user-select: none; user-select: none;   /* щоб довгий тап не виділяв текст */
     background: var(--night);
     color: var(--bone);
     font: 15px/1.5 var(--mono);
@@ -50,19 +51,25 @@
      ВИНЯТОК: перший, чорний екран має клас .on прямо в розмітці —
      щоб його було видно навіть якщо код узагалі не запустився. */
   .screen { display: none; }
-  .screen.on { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
+  /* 100dvh, а не 100vh: на мобільних адресний рядок то зʼявляється,
+     то зникає, і 100vh залишає під ним смугу порожнечі. */
+  .screen.on { display: grid; place-items: center; height: 100dvh; padding: 0; }
   .screen-game.on {
-    display: flex; align-items: flex-start; gap: 18px; padding: 20px; place-items: initial;
+    display: flex; align-items: flex-start; gap: 12px;
+    height: 100dvh; padding: 10px; place-items: initial;
   }
 
   /* Рамка 16:9 — той самий кадр, що й полотно гри,
      щоб меню й гра не стрибали по розміру. */
+  /* Раніше тут була рамка 16:9 по центру. Тепер вона займає весь
+     екран будь-якої форми: відео й фон обрізаються по краях
+     (object-fit: cover), а меню стоїть відносно країв вікна. */
   .frame {
     position: relative;
-    width: min(100%, (100vh - 40px) * 16 / 9);
-    aspect-ratio: 16 / 9;
+    width: 100%;
+    height: 100dvh;
     overflow: hidden;
-    border: 1px solid #241a26;
+    border: 0;
   }
   .frame-art {
     background: var(--night) center / cover no-repeat;
@@ -206,7 +213,9 @@
     color: #cfc3b2;
   }
 
-  /* Вимикач музики — навмисно тихий, щоб не сперечався з кнопками */
+  .tiny-row { display: flex; gap: 18px; }
+
+  /* Службові написи — навмисно тихі, щоб не сперечались із кнопками */
   .mute {
     all: unset; cursor: pointer;
     font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
@@ -282,7 +291,7 @@
     width: 100%;
     height: auto;
     aspect-ratio: 16 / 9;
-    max-height: calc(100vh - 110px);
+    max-height: calc(100dvh - 76px);
     background: #12111a;
     border: 1px solid var(--line);
     margin-inline: auto;
@@ -297,11 +306,11 @@
   .hud b { color: var(--gold); font-weight: 600; }
 
   aside {
-    flex: 0 0 300px;
+    flex: 0 0 clamp(220px, 21vw, 300px);
     background: var(--panel);
     border: 1px solid var(--line);
     padding: 16px;
-    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 20px);
     overflow-y: auto;
     font-family: var(--mono);
   }
@@ -354,12 +363,37 @@
 
   :focus-visible { outline: 1px solid var(--candle); outline-offset: 3px; }
 
-  @media (max-width: 1000px) {
-    .screen-game.on { flex-wrap: wrap; padding: 12px; }
+  /* Телефон боком: висота маленька, і кожен піксель на рахунку.
+     Панель вужчає, службові написи ховаються, полотно лишається
+     головним. Розкладку в стовпчик тут НЕ вмикаємо — це зжерло б
+     висоту, якої й так немає. */
+  @media (max-height: 560px) {
+    .screen-game.on { padding: 6px; gap: 8px; }
+    .hud-title, .keys, .stats { display: none; }
+    aside { flex: 0 0 190px; padding: 10px; font-size: 12px; }
+    aside h2 { margin-bottom: 6px; }
+    canvas { max-height: calc(100dvh - 34px); }
+    .hud { font-size: 11px; margin-top: 4px; }
+  }
+
+  /* Вузьке вікно на десктопі — тут місце ще є, можна в стовпчик. */
+  @media (max-width: 1000px) and (min-height: 561px) {
+    .screen-game.on { flex-wrap: wrap; overflow-y: auto; }
     .stage { flex: 1 1 100%; }
     aside { flex: 1 1 100%; max-height: none; }
-    canvas { max-height: none; }
-    .frame { width: 100%; }
+  }
+
+  /* Телефон вертикально: грати так неможливо, просимо повернути. */
+  #rotate { display: none; }
+  @media (orientation: portrait) and (max-width: 900px) {
+    #rotate {
+      display: flex; position: fixed; inset: 0; z-index: 90;
+      background: #000; color: var(--bone);
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px; text-align: center; padding: 0 12%;
+      font-family: var(--prose); font-size: 21px; font-style: italic;
+    }
+    #rotate svg { width: 76px; height: 76px; opacity: .8; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
@@ -405,12 +439,25 @@
         <button class="menu-item" data-go="leaderboard" id="s-go-board">Leaderboards</button>
         <button class="menu-item" data-go="credits"     id="s-go-credits">Credits</button>
       </nav>
-      <button class="mute" id="s-mute" aria-label="Sound">Звук: увімкнено</button>
+      <div class="tiny-row">
+        <button class="mute" id="s-mute" aria-label="Sound">Sound: turn off</button>
+        <button class="mute" id="s-full" aria-label="Fullscreen">Fullscreen</button>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- Музика меню. Джерело підставляє src/screens.js. -->
+<!-- Видно тільки на телефоні, повернутому вертикально. -->
+<div id="rotate">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+    <rect x="7" y="2" width="10" height="20" rx="2"/>
+    <path d="M3 15a9 9 0 0 0 4 5" stroke-linecap="round"/>
+    <path d="M21 9a9 9 0 0 0-4-5" stroke-linecap="round"/>
+  </svg>
+  <p id="s-rotate-text" style="margin:0">Rotate your device</p>
+</div>
+
 <audio id="s-music" loop preload="auto"></audio>
 <audio id="s-music-game" loop preload="auto"></audio>
 <!-- Грім. Не зациклений: його щоразу перезапускає відео меню,
