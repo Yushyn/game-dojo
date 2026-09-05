@@ -787,13 +787,13 @@ function nextBootOrWin() {
 // Скільки триває блідніння з червоним
 function dyingTotal() {
   const L = T.lives || {};
-  return (L.fadeSeconds ?? 0.6) + (L.holdSeconds ?? 1.2);
+  return (L.footFadeSeconds ?? 0.6) + (L.holdSeconds ?? 1.2);
 }
 
 // Наскільки зараз «мертва» нога: 0 — звичайна, 1 — повністю бліда й червона
 function deathMix() {
   if (game.phase === 'dying') {
-    const f = Math.max(0.001, T.lives?.fadeSeconds ?? 0.6);
+    const f = Math.max(0.001, T.lives?.footFadeSeconds ?? 0.6);
     return Math.min(1, ((performance.now() - game.dieT0) / 1000) / f);
   }
   return (game.phase === 'anim' || game.phase === 'lost') ? 1 : 0;
