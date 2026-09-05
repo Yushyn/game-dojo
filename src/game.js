@@ -159,19 +159,37 @@ export function start(canvasEl, callbacks) {
     .then((imgs) => {
       footImages = imgs.slice(0, feet.length);
       setupFoot(footImages[0]);
-      boots = T.boots.map((def, i) => prepBoot(def, imgs[feet.length + i]));
+      // Порядок раундів беремо з `bootOrder`, якщо він заданий.
+      // Числа там рахуються з одиниці — так зрозуміліше без коду.
+      const all = T.boots.map((def, i) => prepBoot(def, imgs[feet.length + i]));
+      const order = (T.bootOrder && T.bootOrder.length)
+        ? T.bootOrder.map((n) => all[n - 1]).filter(Boolean)
+        : all;
+      boots = order.length ? order : all;
+      if ((T.bootOrder || []).length && boots.length !== T.bootOrder.length) {
+        console.warn('bootOrder: якісь номери вказують у порожнечу. ' +
+          'У списку boots зараз ' + all.length + ' чобіт, нумерація з 1.');
+      }
       reportBaselines();
       game.phase = 'idle';
       notify();
 
       // Контури не критичні: якщо якогось немає, крок вступу
       // просто покаже кольоровий силует замість малюнка.
-      T.boots.forEach((def, i) => {
-        if (!def.outline) return;
-        loadImage(def.outline)
+      // Контури вантажимо по самих чоботях, а не за номером у списку:
+      // після `bootOrder` порядок уже інший, і по номеру контур ліг би
+      // не на той чобіт. Один файл на кілька чобіт — теж нормально.
+      const seen = new Map();
+      boots.forEach((b) => {
+        if (!b.outlineSrc) return;
+        const done = seen.get(b.outlineSrc);
+        if (done) { done.push(b); return; }
+        const waiting = [b];
+        seen.set(b.outlineSrc, waiting);
+        loadImage(b.outlineSrc)
           .then((im) => {
-            boots[i].outline = im;
-            boots[i].outlineBBox = bboxOfImage(im);
+            const box = bboxOfImage(im);
+            waiting.forEach((x) => { x.outline = im; x.outlineBBox = box; });
           })
           .catch((e) => console.warn('Контур не завантажився:', e.message));
       });
@@ -270,6 +288,7 @@ function prepBoot(def, img) {
 
   return {
     name: def.name || '',
+    outlineSrc: def.outline || '',
     pass: typeof def.passPercent === 'number' ? def.passPercent : T.round.passPercent,
     img,
     shape: makeSilhouette(img, T.colors.overlay),   // для накладання на стопу

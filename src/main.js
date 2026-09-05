@@ -250,7 +250,7 @@ function render(s) {
   document.body.dataset.phase = st.phase;
 
   put('hud-round', 'textContent',
-      fill(t.hudRound, { n: st.round + 1, total: st.total || 1 }));
+      fill(t.hudRound, { name: st.bootName, n: st.round + 1, total: st.total || 1 }));
   put('hud-goal', 'textContent', fill(t.hudGoal, { pass: st.pass }));
 
   // Таймер і смужка. Під час вступу робочий час ще не йде — там
@@ -269,11 +269,12 @@ function render(s) {
   }
 
   if (barEl) {
-    // Смужка наповнюється в міру того, як час спливає.
+    // Смужка ВБУВАЄ: на початку раунду повна, далі правий її край
+    // повзе вліво. Порожня — час вийшов.
     const total = TUNING.round.totalSeconds || 1;
-    const done = st.phase === 'play' ? 1 - st.timeLeft / total
-               : (st.phase === 'result' || st.phase === 'done') ? 1 : 0;
-    barEl.style.width = Math.max(0, Math.min(1, done)) * 100 + '%';
+    const left = st.phase === 'play' ? st.timeLeft / total
+               : st.phase === 'intro' ? 1 : 0;
+    barEl.style.width = Math.max(0, Math.min(1, left)) * 100 + '%';
   }
 
   brushButtons.forEach((b, i) => {
