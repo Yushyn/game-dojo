@@ -424,6 +424,7 @@ function render(s) {
 
   put('hud-round', 'textContent',
       fill(t.hudRound, { name: st.bootName, n: st.round + 1, total: st.total || 1 }));
+  put('hud-total', 'textContent', fill(t.hudTotal, { score: st.score }));
   put('hud-goal', 'textContent', fill(t.hudGoal, { pass: st.pass }));
 
   renderTime(st);

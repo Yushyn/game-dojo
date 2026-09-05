@@ -550,15 +550,27 @@
   .hud > * { pointer-events: auto; }
   .hud-text { text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 10) rgba(0,0,0,.95); }
 
-  .hud-left { position: absolute; left: calc(var(--u) * 294); top: calc(var(--u) * 38); }
+  /* Ліворуч угорі: назва чобота з рахунком, під нею — умова раунду.
+     Було 294u — зсунуто до самого краю, бо в один рядок тепер
+     влазить і назва, і Total score, а праворуч чекає смужка часу. */
+  .hud-left {
+    position: absolute; left: calc(var(--u) * 48); top: calc(var(--u) * 38);
+  }
   .hud-round {
     font-size: calc(var(--u) * 30); font-weight: 600; letter-spacing: .04em;
     color: #f4eee2; margin: 0;
   }
+
   .hud-goal {
     font-family: var(--prose);
     font-size: calc(var(--u) * 25); color: #cec3b2;
     margin: calc(var(--u) * 2) 0 0;
+  }
+  /* Третій рядок: скільки очок набрано за всю гру, за всі життя. */
+  .hud-total {
+    font-size: calc(var(--u) * 25); font-weight: 600; letter-spacing: .03em;
+    color: #f4dfb4;
+    margin: calc(var(--u) * 10) 0 0;
   }
 
   .hud-mid {
@@ -939,6 +951,7 @@
       <div class="hud-left hud-text">
         <p class="hud-round" id="hud-round">Round 1/2</p>
         <p class="hud-goal"  id="hud-goal">To win, make a 70% match</p>
+        <p class="hud-total" id="hud-total">Total score: 0</p>
       </div>
 
       <div class="hud-mid hud-text">
