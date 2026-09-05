@@ -862,13 +862,20 @@ function sideX() { return GAME.width * 0.84; }
 function drawIntro() {
   const I = T.intro, boot = boots[game.round], t = game.introT;
 
+  // Контур лежить на місці від початку, але спочатку прозорий.
+  // Він набирає щільність рівно тоді, коли чобіт її втрачає —
+  // виходить перетікання одного в інше, а не дві окремі появи.
+  const fade = Math.max(0.001, I.fadeSeconds);
+  const from = Math.max(0, I.bootSeconds - fade);   // мить, коли чобіт починає гаснути
+  let outlineA = t < from ? 0 : Math.min(1, (t - from) / fade);
+  outlineA = Math.min(outlineA, (introTotal() - t) / fade);  // і гасне в кінці вступу
+  outlineA = clamp01(outlineA) * I.outlineAlpha;
+  if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, outlineA);
+  else drawBootOnFoot(boot.shape, roundFrame, outlineA * 0.7);
+
+  // Сам чобіт зверху, поки не розтане
   if (t < I.bootSeconds) {
     drawBootOnFoot(boot.img, roundFrame, stepAlpha(t, I.bootSeconds) * I.bootAlpha);
-  } else {
-    const t2 = t - I.bootSeconds;
-    const a = stepAlpha(t2, I.outlineSeconds) * I.outlineAlpha;
-    if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, a);
-    else drawBootOnFoot(boot.shape, roundFrame, a * 0.7);
   }
 
   textShade(0, 150);
