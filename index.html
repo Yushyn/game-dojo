@@ -67,13 +67,22 @@
   .frame-art {
     background: var(--night) center / cover no-repeat;
   }
-  /* Затемнення під текст. Лежить під контентом, кліки не ловить. */
+  /* Затемнення під текст. Лежить над відео, але під написами,
+     і кліків не ловить. У відео є спалах блискавки — без цього
+     шару в цю мить меню стає нечитабельним. */
   .frame-art::before {
     content: '';
-    position: absolute; inset: 0; z-index: 0;
-    background: radial-gradient(115% 85% at 25% 35%, rgba(7,6,11,0) 35%, rgba(7,6,11,.82) 100%);
+    position: absolute; inset: 0; z-index: 1;
+    background:
+      linear-gradient(to bottom right, rgba(7,6,11,0) 42%, rgba(7,6,11,.78) 100%),
+      radial-gradient(115% 85% at 25% 35%, rgba(7,6,11,0) 35%, rgba(7,6,11,.72) 100%);
   }
-  .frame-art > * { position: relative; z-index: 1; }
+  .frame-art > * { position: relative; z-index: 2; }
+  .frame-art > video.bg-video {
+    position: absolute; inset: 0; z-index: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
   .veil { position: absolute; inset: 0; background: rgba(7,6,11,.78); }
 
   /* ══ ЧОРНИЙ ЕКРАН «PRESS TO START» ═══════════════════════════
@@ -350,6 +359,9 @@
 <!-- ══ 3. ГОЛОВНЕ МЕНЮ ══════════════════════════════════════════ -->
 <section class="screen screen-menu" data-screen="menu">
   <div class="frame frame-art" data-art>
+    <!-- Тло меню. Файл підставляє src/screens.js, поки відео не
+         почалося — видно кадр-заставку, той самий кадр. -->
+    <video class="bg-video" id="s-menu-video" muted loop playsinline preload="auto"></video>
     <h1 class="logo logo-corner" id="s-menu-title">Game Dojo 2026</h1>
     <nav class="menu">
       <button class="menu-item" data-go="game"        id="s-go-game">Нова гра</button>

@@ -36,6 +36,7 @@ export function showScreen(name) {
   }
 
   current = name;
+  toggleVideo(name);
   hooks.onShow?.(name);
 
   // Завантаження запускається рівно один раз, при першому заході.
@@ -135,11 +136,48 @@ function buildFeet() {
   }
 }
 
-// ── Фон меню — та сама картинка, що й у грі ───────────────────
+// ── Тло екранів поза грою ─────────────────────────────────────
+// Нерухомий кадр лягає на всі три екрани одразу, а в меню поверх
+// нього грає відео. Якщо відео не підтягнеться — лишиться кадр,
+// і меню все одно виглядатиме як задумано.
 function paintArt() {
-  if (!TUNING.background.show || !TUNING.background.src) return;
-  const url = 'url("' + TUNING.background.src + '")';
-  document.querySelectorAll('[data-art]').forEach((el) => { el.style.backgroundImage = url; });
+  const V = S.menuVideo || {};
+  const still = V.poster || (TUNING.background.show ? TUNING.background.src : '');
+
+  if (still) {
+    const url = 'url("' + still + '")';
+    document.querySelectorAll('[data-art]').forEach((el) => { el.style.backgroundImage = url; });
+  }
+
+  const vid = $('s-menu-video');
+  if (!vid) return;
+
+  // Людям, які просили менше руху в системі, показуємо кадр.
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const list = V.sources || (V.src ? [V.src] : []);
+  if (!list.length || V.play === false || calm) { vid.remove(); return; }
+
+  if (V.poster) vid.poster = V.poster;
+  list.forEach((src) => {
+    const el = document.createElement('source');
+    el.src = src;
+    if (src.endsWith('.webm')) el.type = 'video/webm';
+    if (src.endsWith('.mp4'))  el.type = 'video/mp4';
+    vid.appendChild(el);
+  });
+  vid.load();
+}
+
+// Відео крутиться лише поки видно меню — щоб дарма не гріти ноутбук.
+function toggleVideo(name) {
+  const vid = $('s-menu-video');
+  if (!vid) return;
+  if (name === 'menu') {
+    const p = vid.play();
+    if (p && p.catch) p.catch(() => {});   // браузер може відмовити, це не біда
+  } else {
+    vid.pause();
+  }
 }
 
 // ── Кнопки ────────────────────────────────────────────────────
@@ -208,7 +246,10 @@ function runLoading() {
   const pct  = $('s-load-pct');
 
   const jobs = [];
+  const V = S.menuVideo || {};
+  if (V.poster) jobs.push(loadImage(V.poster));
   if (TUNING.background.show && TUNING.background.src) jobs.push(loadImage(TUNING.background.src));
+  jobs.push(waitForVideo());
   jobs.push(waitForGame());
 
   let done = 0;
@@ -257,6 +298,21 @@ function loadImage(src) {
     im.onload  = () => res(true);
     im.onerror = () => res(false);   // фон не критичний, просто йдемо далі
     im.src = src;
+  });
+}
+
+// Відео великого розміру, тож чекаємо, поки його стане досить
+// для безперервного програвання. Але не більше чотирьох секунд:
+// краще показати меню з нерухомим кадром, ніж тримати людину.
+function waitForVideo() {
+  return new Promise((res) => {
+    const vid = $('s-menu-video');
+    if (!vid || !vid.children.length) return res(true);
+    if (vid.readyState >= 3) return res(true);
+    const done = () => res(true);
+    vid.addEventListener('canplaythrough', done, { once: true });
+    vid.addEventListener('error', done, { once: true });
+    setTimeout(done, 4000);
   });
 }
 
