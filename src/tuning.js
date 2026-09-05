@@ -415,7 +415,7 @@ export const TUNING = {
     // ні для стопи, ні для чобота.
     cutAboveBoot: true,
     cutOffset:    0,     // зсув лінії, у частках висоти чобота (+ вниз)
-    showCutLine:  false, // показувати червону лінію на екрані
+    showCutLine:  true, // показувати червону лінію на екрані
     cutLineColor: 'rgba(255, 90, 90, 0.45)',
   },
 
