@@ -375,7 +375,7 @@ export const TUNING = {
     retry:  'One more leg',
 
     // Вікно «вийти в меню?», яке зʼявляється по хрестику
-    askLeave: 'Return to the main menu?'',
+    askLeave: 'Return to the main menu?',
     askNote:  'This round won’t count, and you’ll lose all points earned in this game.',
     askYes:   'Yes',
     askNo:    'No',
