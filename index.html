@@ -654,10 +654,42 @@
     -webkit-mask-size: contain;     mask-size: contain;
     pointer-events: none;
   }
+  /* Білий шар — для життя, яким грають просто зараз. Влаштований
+     так само, як червоний: картинка-трафарет, крізь неї проступає
+     суцільний колір, тому світиться рівно силует ступні. */
+  .lives .life-glow {
+    position: absolute; inset: 0;
+    background: var(--life-white, #fff);
+    opacity: 0;
+    transition: opacity var(--life-icon-fade, .5s) ease;
+    -webkit-mask-position: center; mask-position: center;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-size: contain;     mask-size: contain;
+    pointer-events: none;
+  }
+
+  /* Ціле, але ще не в грі: притухле, щоб активне вирізнялось. */
+  .lives .life img { opacity: var(--life-idle, .5); }
+
+  /* Активне життя: біле й зі світінням навколо. */
+  .lives .life.active img        { opacity: 1; }
+  .lives .life.active .life-glow { opacity: var(--life-white-alpha, .95); }
+  .lives .life.active {
+    filter: drop-shadow(0 0 var(--life-glow, 14px) rgba(255, 255, 255, .55));
+  }
+
+  /* Підсвітку вимкнено (lives.iconHighlight: false у tuning.js):
+     усі цілі значки однакові, білий шар і сяйво не показуються.
+     Червоний для втрачених працює як і працював. */
+  .lives.no-highlight .life img        { opacity: 1; }
+  .lives.no-highlight .life .life-glow { opacity: 0; }
+  .lives.no-highlight .life            { filter: none; }
+
   /* Життя втрачено: картинка притухає, червоний проступає.
      Значок НЕ зникає — він лишається на екрані до кінця гри. */
   .lives .life.lost img        { opacity: var(--life-dim, .45); }
   .lives .life.lost .life-tint { opacity: var(--life-red-alpha, .9); }
+  .lives .life.lost .life-glow { opacity: 0; }
 
   /* Повноекранний ролик при втраті життя. Картинку-заглушку малює
      саме полотно; сюди підставляється відео, коли воно зʼявиться. */

@@ -225,6 +225,13 @@ function buildLives() {
   livesBox.style.setProperty('--life-red', L.iconRed ?? '#c02020');
   livesBox.style.setProperty('--life-red-alpha', L.iconRedAlpha ?? 0.9);
   livesBox.style.setProperty('--life-dim', L.iconDim ?? 0.45);
+  livesBox.style.setProperty('--life-idle', L.iconIdle ?? 0.5);
+  // Вимикач підсвітки. Коли вимкнена, значки цілих життів
+  // виглядають однаково, а втрачені так само червоніють.
+  livesBox.classList.toggle('no-highlight', L.iconHighlight === false);
+  livesBox.style.setProperty('--life-white', L.iconWhite ?? '#ffffff');
+  livesBox.style.setProperty('--life-white-alpha', L.iconWhiteAlpha ?? 0.95);
+  livesBox.style.setProperty('--life-glow', (L.iconGlow ?? 14) + 'px');
   livesBox.style.setProperty('--life-icon-fade', (L.iconFadeSeconds ?? 0.5) + 's');
 
   livesBox.innerHTML = '';
@@ -241,7 +248,15 @@ function buildLives() {
     im.alt = '';
     cell.appendChild(im);
 
-    // Червоний шар: та сама картинка як трафарет.
+    // Два кольорові шари поверх картинки, обидва по тому самому
+    // трафарету: білий — для життя, яким зараз грають, червоний —
+    // для вже втраченого. Одночасно вони не вмикаються.
+    const glow = document.createElement('i');
+    glow.className = 'life-glow';
+    glow.style.webkitMaskImage = 'url("' + src + '")';
+    glow.style.maskImage = 'url("' + src + '")';
+    cell.appendChild(glow);
+
     const tint = document.createElement('i');
     tint.className = 'life-tint';
     tint.style.webkitMaskImage = 'url("' + src + '")';
@@ -453,7 +468,15 @@ function render(s) {
   // Гаснуть СПРАВА наліво: перший втрачений — правий значок,
   // той, що стоїть трохи вище.
   // Втрачене життя не ховаємо, а позначаємо червоним.
-  lifeIcons.forEach((el, i) => el.classList.toggle('lost', i >= st.lives));
+  // Активне життя — те, яким грають просто зараз. Порядок той
+  // самий, що й у втратах: спершу права нога (правий значок),
+  // потім ліва. Тобто активний завжди останній НЕ втрачений.
+  const activeIdx = st.lives - 1;
+  lifeIcons.forEach((el, i) => {
+    const lost = i >= st.lives;
+    el.classList.toggle('lost', lost);
+    el.classList.toggle('active', !lost && i === activeIdx);
+  });
 
   // Другий запобіжник: ролик і його звук — лише на екрані гри.
   showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);
