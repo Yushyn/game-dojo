@@ -81,6 +81,24 @@ export async function topScores(limit) {
   }
 }
 
+// Чи потрапляє результат у таблицю. Дивимось на стільки місць,
+// скільки їх узагалі показує лідерборд: якщо місць ще менше, ніж
+// треба, потрапляє будь-хто; якщо всі зайняті — треба обійти
+// останнього.
+//
+// Коли база недоступна, кажемо «так»: краще дати вписати імʼя
+// й чесно показати помилку збереження, ніж мовчки не показати
+// поле людині, яка, можливо, і справді в топі.
+export async function qualifies(score) {
+  const places = Math.max(1, TUNING.leaderboard?.limit || 20);
+  if (!supabase) return { ok: true, unknown: true, places };
+  const rows = await topScores(places);
+  if (!rows.length) return { ok: true, places, last: null };
+  if (rows.length < places) return { ok: true, places, last: rows[rows.length - 1].score };
+  const last = rows[rows.length - 1].score;
+  return { ok: Math.floor(score) > last, places, last };
+}
+
 export async function submitScore(player, score) {
   if (!supabase) return { ok: false, reason: 'база недоступна' };
   try {

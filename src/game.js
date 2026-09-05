@@ -141,11 +141,13 @@ export function start(canvasEl, callbacks) {
 
   // Повноекранна заставка при втраті життя. Якщо це відео —
   // ним керує сторінка, тут вантажимо лише картинку.
-  const A = T.lives?.anim || '';
-  if (A && !/\.(webm|mp4)$/i.test(A)) {
-    loadImage(A).then((im) => { animImage = im; })
-      .catch((e) => console.warn('Заставка втрати життя не завантажилась:', e.message));
-  }
+  // Може бути одне ім'я або список. Пробуємо всі картинки зі списку
+  // по черзі: перша, яка відкрилась, і стане заглушкою. Відео тут
+  // не чіпаємо — ним керує сторінка.
+  [].concat(T.lives?.anim || []).filter((A) => A && !/\.(webm|mp4)$/i.test(A))
+    .reduce((chain, A) => chain.then((got) => got ||
+      loadImage(A).then((im) => { animImage = im; return true; }).catch(() => false)),
+      Promise.resolve(false));
   if (T.pedestal?.show) {
     loadImage(T.pedestal.src)
       .then((im) => { pedImage = im; })
@@ -230,7 +232,10 @@ function reportBaselines() {
     const v = overlapPercent(footGrid(), bootGrid(b, fr));
     const fit = fr && fr.shrink < 0.999
       ? `, зменшено до ${Math.round(fr.shrink * 100)}% щоб улізти в рамку` : '';
-    return `  ${b.name}: без жодного руху ${v.toFixed(1)}%, поріг ${b.pass}%${fit}`;
+    const off = b.cutOffset !== null && b.cutOffset !== undefined
+      ? b.cutOffset : (T.compare.cutOffset || 0);
+    const cut = off ? `, межа площі зсунута на ${off}` : '';
+    return `  ${b.name}: без жодного руху ${v.toFixed(1)}%, поріг ${b.pass}%${fit}${cut}`;
   });
   roundCutY = 0;
   console.log('Game Dojo — баланс порогів:\n' + lines.join('\n'));
@@ -291,6 +296,9 @@ function prepBoot(def, img) {
   return {
     name: def.name || '',
     outlineSrc: def.outline || '',
+    // Верхня межа площі. Якщо в чобота свого числа немає,
+    // береться загальне з блоку compare.
+    cutOffset: typeof def.cutOffset === 'number' ? def.cutOffset : null,
     pass: typeof def.passPercent === 'number' ? def.passPercent : T.round.passPercent,
     img,
     shape: makeSilhouette(img, T.colors.overlay),   // для накладання на стопу
@@ -438,7 +446,10 @@ function shrinkToArea(bb, k) {
 function cutLineFor(boot, fr) {
   if (!T.compare.cutAboveBoot || !fr || !boot.bbox) return 0;
   const top = boot.bbox.bottom - boot.bbox.h;
-  return fr.dy + (top + T.compare.cutOffset * boot.bbox.h) * fr.k;
+  // Своє число чобота переважає загальне
+  const off = boot.cutOffset !== null && boot.cutOffset !== undefined
+    ? boot.cutOffset : (T.compare.cutOffset || 0);
+  return fr.dy + (top + off * boot.bbox.h) * fr.k;
 }
 
 // Силует стопи на сітці, натягнутій на весь буфер.

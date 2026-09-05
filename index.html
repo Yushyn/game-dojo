@@ -448,6 +448,10 @@
     text-shadow: 0 2px 10px rgba(0,0,0,.95);
     white-space: nowrap;
   }
+  /* Фото ще немає в папці — підписи піднімаємо в центр, щоб екран
+     не виглядав порожнім із рядком імен унизу. */
+  .cr-stage.no-photo { justify-content: center; width: 100%; }
+  .cr-stage.no-photo .cr-names { height: auto; }
   .cr-name b { display: block; font-weight: 500; color: var(--candle-lit); }
   .cr-name i { display: block; font-style: normal; opacity: .85; }
 
@@ -531,13 +535,13 @@
 
   /* Шар інтерфейсу. Сам він кліків не ловить — тільки те, що
      всередині, інакше не можна було б мняти стопу. */
-  .hud {
-    position: absolute; inset: 0; pointer-events: none;
-    font-family: var(--display);
-    transition: opacity .3s ease;
-  }
-  /* Поки йде повноекранна заставка втрати життя, інтерфейс
-     ховається: вона має бути справді на весь екран. */
+  .hud {
+    position: absolute; inset: 0; pointer-events: none;
+    font-family: var(--display);
+    transition: opacity .3s ease;
+  }
+  /* Поки йде повноекранна заставка втрати життя, інтерфейс
+     ховається: вона має бути справді на весь екран. */
   body[data-phase="anim"] .hud { opacity: 0; pointer-events: none; }
   .hud > * { pointer-events: auto; }
   .hud-text { text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 10) rgba(0,0,0,.95); }
@@ -737,6 +741,19 @@
     font-family: var(--mono); font-size: calc(var(--u) * 16); letter-spacing: .12em;
     color: var(--ash); min-height: 2em; margin: calc(var(--u) * 18) 0 0; text-align: center;
   }
+  /* Блок «вписати імʼя» показується не всім: лише тому, хто обійшов
+     останнього в таблиці. Решті замість нього — тихий рядок .miss. */
+  .save-row[hidden] { display: none; }
+  .save-hint {
+    font-family: var(--display); font-size: calc(var(--u) * 30);
+    letter-spacing: .06em; color: var(--candle-lit); margin: 0;
+  }
+  .miss {
+    font-family: var(--prose); font-size: calc(var(--u) * 26);
+    color: var(--ash); margin: 0 0 calc(var(--u) * 20); text-align: center;
+  }
+  .miss[hidden] { display: none; }
+  #win-row, #lost-save { margin-top: calc(var(--u) * 24); }
 
   :focus-visible { outline: 1px solid var(--candle); outline-offset: 3px; }
 
@@ -936,7 +953,20 @@
     <div class="veil"></div>
     <div class="page">
       <h2 class="page-title" id="s-lost-title">Гру програно</h2>
-      <p class="result-score"><span id="s-lost-note">Життя скінчились.</span></p>
+      <p class="result-score">
+        <span id="s-lost-note">Життя скінчились.</span>
+        <b id="s-lost-score">0</b>
+      </p>
+
+      <!-- Поле для імені зʼявляється лише тим, хто потрапив у таблицю.
+           Показ вмикає src/main.js, звіривши рахунок з останнім місцем. -->
+      <div class="save-row" id="lost-save" hidden>
+        <p class="save-hint" id="s-lost-hint">Ти в таблиці!</p>
+        <input id="lost-name" maxlength="24" placeholder="Твоє імʼя" aria-label="Твоє імʼя">
+        <button class="menu-item" id="lost-send">Зберегти результат</button>
+        <p class="status" id="lost-status"></p>
+      </div>
+
       <div class="ask-row">
         <button class="menu-item" id="lost-again">Ще раз</button>
         <button class="menu-item" data-go="menu" id="lost-menu">У меню</button>
@@ -957,13 +987,19 @@
         <span id="s-result-label">Твій рахунок</span>
         <b id="s-result-score">0</b>
       </p>
-      <div class="save-row">
+      <div class="save-row" id="win-save" hidden>
+        <p class="save-hint" id="s-win-hint">Ти в таблиці!</p>
         <input id="name" maxlength="24" placeholder="Твоє імʼя" aria-label="Твоє імʼя">
         <button class="menu-item" id="save">Зберегти результат</button>
       </div>
+      <p class="miss" id="s-win-miss" hidden>Не вистачило до таблиці</p>
       <p class="status" id="status"></p>
+
+      <div class="ask-row" id="win-row">
+        <button class="menu-item" data-go="menu" id="win-menu">У меню</button>
+      </div>
     </div>
-    <button class="back" data-go="menu">Назад</button>
+    <button class="back" data-go="menu">Back</button>
   </div>
 </section>
 
