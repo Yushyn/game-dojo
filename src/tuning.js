@@ -106,10 +106,14 @@ export const TUNING = {
     //
     // Кожен ролик має власне розміщення, бо аніматор рендерить їх
     // у різних кадрах. Числа зняті звіркою силуетів, підбирати не треба.
+    // on: true — ролик грає, on: false — гра його просто пропускає.
+    // Якщо лишити ввімкненим один, він крутиться по колу сам.
     clips: [
-      { video: 'assets/girl.webm',
+      { on: true,  video: 'assets/girl.webm',
         heightPercent: 1.133,  centerX: 0.8705, bottomY: 1.267 },
-      { video: 'assets/girl2.webm',
+
+      // Дівчинка з мечем. Поки вимкнена — постав on: true, щоб повернути.
+      { on: false, video: 'assets/girl2.webm',
         heightPercent: 1.1409, centerX: 0.8744, bottomY: 1.2687 },
     ],
 
@@ -352,6 +356,12 @@ export const TUNING = {
     brushSmall:  'Малий',
     brushMedium: 'Середній',
     brushBig:    'Великий',
+
+    // Вікно «вийти в меню?», яке зʼявляється по хрестику
+    askLeave: 'Вийти в головне меню?',
+    askNote:  'Раунд не зарахується, очки за цю гру пропадуть.',
+    askYes:   'Так',
+    askNo:    'Ні',
 
     // Екран результату в кінці гри
     resultTitle:     'Гру закінчено',

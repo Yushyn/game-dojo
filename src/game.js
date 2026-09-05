@@ -55,6 +55,7 @@ let girlCur = 0;         // який ролик зараз основний
 let girlNext = -1;       // який проявляється поверх нього, або -1
 let girlSheet = null;    // спрайтшит: запасний варіант, якщо відео не пішло
 let girlT0 = 0;          // мить, коли її анімація почалась — для спрайтшита
+let girlCross = 0.5;     // за скільки секунд один ролик перетікає в наступний
 let pedImage = null;     // окремий шар пʼєдестала поверх неї
 let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
 
@@ -69,6 +70,7 @@ const game = {
   introT: 0,
   canEdit: false,
   attempt: 0,         // яка це спроба на цьому чоботі, рахуючи з нуля
+  paused: false,      // час стоїть: відкрите вікно «вийти в меню?»
   resultT0: 0,        // мить, коли показали результат раунду
   lastMatch: 0,
   lastPassed: false,
@@ -671,6 +673,7 @@ export function reset() {
   game.lastPoints = 0;
   game.canEdit = false;
   game.attempt = 0;
+  game.paused = false;
   brushIndex = Math.min(BRUSH_SIZES.length - 1, Math.max(0, T.brush.startIndex ?? 1));
   if (dispX) { dispX.fill(0); dispY.fill(0); }
   undoStack.length = 0;
@@ -679,6 +682,11 @@ export function reset() {
 }
 
 function updateTimers(now) {
+  // На паузі час не йде взагалі: ні вступ, ні раунд, ні показ
+  // результату. Мить паузи запамʼятовуємо, щоб потім зсунути
+  // початок відліку рівно на стільки, скільки простояли.
+  if (game.paused) { game.canEdit = false; return; }
+
   if (game.phase === 'intro') {
     game.canEdit = false;
     game.introT = (now - game.t0) / 1000;
@@ -712,6 +720,26 @@ function updateTimers(now) {
   if (game.canEdit && game.timeLeft <= 0) finishRound();
 }
 
+// Пауза для вікна «вийти в меню?». Поки воно відкрите, час стоїть,
+// а стопу рухати не можна.
+let pauseT0 = 0;
+
+export function setPaused(on) {
+  if (!!on === game.paused) return;
+  if (on) {
+    pauseT0 = performance.now();
+    game.paused = true;
+  } else {
+    const stood = performance.now() - pauseT0;
+    game.t0 += stood;              // вступ і робочий час
+    game.resultT0 += stood;        // і показ результату
+    game.paused = false;
+  }
+  notify();
+}
+
+export function isPaused() { return game.paused; }
+
 function notify() { hooks.onUpdate?.(getState()); }
 
 export function getState() {
@@ -733,6 +761,7 @@ export function getState() {
     attemptsPerBoot: Math.max(1, T.round.attemptsPerBoot || 1),
     pass: boots[game.round]?.pass ?? T.round.passPercent,
     brush: brushIndex,
+    paused: game.paused,
     brushSizes: BRUSH_SIZES,
     introTotal: introTotal(),
   };
@@ -807,7 +836,22 @@ function frame(now) {
 
 function loadGirl() {
   const G = T.girl;
-  const list = (G.clips && G.clips.length) ? G.clips : [{ video: G.video }];
+  const all = (G.clips && G.clips.length) ? G.clips : [{ video: G.video }];
+
+  // Вимкнені ролики (on: false) просто не беремо.
+  let list = all.filter((c) => c && c.on !== false && c.video);
+  if (!list.length) return;          // усі вимкнені — дівчинки на сцені немає
+
+  // Якщо лишився один ролик, робимо з нього ДВІ копії й крутимо їх
+  // по черзі. Це не примха: вбудований loop у браузера перемотує
+  // відео по-справжньому й застигає на 136-249 мс — око читає це як
+  // ривок. Дві копії міняються миттєво, бо друга вже розкодована.
+  // Розчинення при цьому майже нульове: ролик стикується сам із
+  // собою кадр-у-кадр, розмазувати нічого не треба.
+  const single = list.length === 1;
+  if (single) list = [list[0], list[0]];
+  girlCross = single ? 0.06 : Math.max(0.05, G.crossSeconds ?? 0.5);
+
   let ready = 0, failed = false;
 
   const els = list.map((cfg) => {
@@ -857,7 +901,7 @@ function girlTick() {
   const cur = girlEls[girlCur];
   if (!cur || !cur.duration) return;
 
-  const cross = Math.max(0.05, T.girl.crossSeconds ?? 0.5);
+  const cross = girlCross;
   const left = cur.duration - cur.currentTime;
 
   // пора підключати наступний і починати розчинення
@@ -927,8 +971,7 @@ function drawGirl(now) {
       if (girlNext >= 0) {
         // розчинення: старий згасає, новий проявляється
         const nx = girlEls[girlNext];
-        const cross = Math.max(0.05, G.crossSeconds ?? 0.5);
-        const t = Math.max(0, Math.min(1, nx.currentTime / cross));
+        const t = Math.max(0, Math.min(1, nx.currentTime / girlCross));
         drawClip(cur, 1 - t);
         if (nx.readyState >= 2) drawClip(nx, t);
       } else {
