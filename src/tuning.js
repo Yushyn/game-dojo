@@ -128,7 +128,7 @@ export const TUNING = {
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
       name: 'Trail Sneaker',      passPercent: 79 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
-      name: 'Nightshade Heel',    passPercent: 64, cutOffset: 0.10 },
+      name: 'Nightshade Heel',    passPercent: 64, cutOffset: 0.17 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
       name: 'Jester Slipper',     passPercent: 79 },
   ],
@@ -312,8 +312,8 @@ export const TUNING = {
 
     shadow:        true, // мʼяка тінь під стопою. У цьому рендері вона вже
                           // намальована художником, тому вимкнена.
-    shadowWidth:   0.62,  // ширина тіні відносно ширини стопи
-    shadowHeight:  0.05,  // висота тіні відносно висоти стопи
+    shadowWidth:   0.8,  // ширина тіні відносно ширини стопи
+    shadowHeight:  0.1,  // висота тіні відносно висоти стопи
 
     workResolution: 820,  // роздільна здатність деформації.
                           // Більше = чіткіше, але важче для слабких ноутів.
