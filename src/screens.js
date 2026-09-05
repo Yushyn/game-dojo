@@ -83,71 +83,24 @@ function fillTexts() {
 
   document.querySelectorAll('.back').forEach((b) => { b.textContent = S.btnBack; });
 
-  buildTeam();
-}
+  // Автори: список беремо з tuning.js
+  const list = $('credits-list');
+  if (list) {
+    list.innerHTML = '';
+    (S.credits || []).forEach((group) => {
+      const role = document.createElement('p');
+      role.className = 'credits-role';
+      role.textContent = group.role;
+      list.appendChild(role);
 
-// ── Автори: фото команди з підписами ──────────────────────────
-// Кожен підпис стоїть під своєю людиною. Відсотки лежать
-// у tuning.js, у списку team, і зняті з самої картинки.
-function buildTeam() {
-  const box = $('s-team');
-  const P = S.teamPhoto || {};
-  if (!box) return;
-
-  box.innerHTML = '';
-
-  // Підписи стоять у відсотках, тому їхня основа має збігатися
-  // з КАРТИНКОЮ, а не з екраном. Інакше на вузькому вікні, де
-  // фото вужче за контейнер, підписи розʼїжджаються з людьми.
-  const stage = document.createElement('div');
-  stage.className = 'cr-stage';
-
-  const pic = document.createElement('picture');
-  if (P.webp) {
-    const src = document.createElement('source');
-    src.srcset = P.webp; src.type = 'image/webp';
-    pic.appendChild(src);
+      (group.names || []).forEach((n) => {
+        const p = document.createElement('p');
+        p.className = 'credits-name';
+        p.textContent = n;
+        list.appendChild(p);
+      });
+    });
   }
-  const img = document.createElement('img');
-  img.src = P.png || P.webp || '';
-  img.alt = S.creditsTitle || 'Credits';
-  pic.appendChild(img);
-  stage.appendChild(pic);
-
-  const names = document.createElement('div');
-  names.className = 'cr-names';
-  (S.team || []).forEach((p) => {
-    const el = document.createElement('span');
-    el.className = 'cr-name';
-    el.style.left = p.x + '%';
-
-    // Імʼя й прізвище окремими рядками — підпис виходить удвічі
-    // вужчим, і сусідні не налазять один на одного.
-    const parts = String(p.name).trim().split(/\s+/);
-    const first = document.createElement('b');
-    first.textContent = parts.shift();
-    el.appendChild(first);
-    if (parts.length) {
-      const rest = document.createElement('i');
-      rest.textContent = parts.join(' ');
-      el.appendChild(rest);
-    }
-    names.appendChild(el);
-  });
-  stage.appendChild(names);
-  box.appendChild(stage);
-
-  // Ширину смуги з підписами беремо з реального розміру картинки.
-  // CSS тут не помічник: фото масштабується по висоті, і його
-  // ширина стає відома лише після розкладки. Тому міряємо.
-  const fit = () => {
-    const w = img.getBoundingClientRect().width;
-    if (w) names.style.width = w + 'px';
-  };
-  img.addEventListener('load', fit);
-  if (window.ResizeObserver) new ResizeObserver(fit).observe(img);
-  addEventListener('resize', fit);
-  fit();
 }
 
 // ── Сліди на екрані завантаження ──────────────────────────────
@@ -163,6 +116,17 @@ function buildFeet() {
   box.style.setProperty('--cycle', A.cycleSeconds + 's');
   box.innerHTML = '';
 
+  // Ім'я файлу може бути одне або кілька — так само, як у музики.
+  // Беремо перше, що справді відкрилось: аркуш зі слідами приходив
+  // від художника під різними назвами, і без цього екран
+  // завантаження мовчки лишався порожнім.
+  const names = [].concat(A.src || [], 'assets/loading-feet.png');
+  pickFile(names).then((src) => {
+    box.querySelectorAll('i').forEach((el) => {
+      el.style.backgroundImage = 'url("' + src + '")';
+    });
+  });
+
   const pause = A.cycleSeconds / A.count;   // затримка між кроками
 
   // Рахуємо знизу вгору: перший крок — найнижчий відбиток.
@@ -177,7 +141,6 @@ function buildFeet() {
     const pc = (v, whole) => (v / whole * 100).toFixed(3) + '%';
 
     const layer = document.createElement('i');
-    layer.style.backgroundImage = 'url("' + A.src + '")';
     // inset(зверху справа знизу зліва) — лишаємо видимим один відбиток
     layer.style.clipPath = 'inset(' + pc(yTop, A.height) + ' ' +
                                       pc(A.width - x2, A.width) + ' ' +
@@ -464,7 +427,7 @@ function paintMute(btn) {
 function trackFor(name) {
   if (name === 'game') return 'game';
   if (name === 'menu' || name === 'leaderboard' || name === 'credits' ||
-      name === 'result') return 'menu';
+      name === 'result' || name === 'lost') return 'menu';
   return null;   // чорний екран і завантаження — тиша
 }
 
@@ -568,7 +531,8 @@ function bindButtons() {
     if (current === 'press' && !helper.includes(e.key)) { go('loading'); return; }
 
     if (e.key === 'Escape' &&
-        (current === 'leaderboard' || current === 'credits' || current === 'result')) go('menu');
+        (current === 'leaderboard' || current === 'credits' ||
+         current === 'result' || current === 'lost')) go('menu');
   });
 }
 
@@ -669,6 +633,16 @@ function runLoading() {
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+}
+
+// Перше ім'я зі списку, за яким справді є файл.
+// Якщо не відкрилось жодне — віддаємо останнє, щоб не ламати розмітку.
+function pickFile(list) {
+  const names = list.filter(Boolean);
+  return names.reduce(
+    (chain, name) => chain.then((found) => found || loadImage(name).then((ok) => (ok ? name : null))),
+    Promise.resolve(null)
+  ).then((found) => found || names[names.length - 1]);
 }
 
 function loadImage(src) {
