@@ -29,13 +29,9 @@ import { TUNING } from './tuning.js';
 
 const T = TUNING;
 
-// ── Інструмент ────────────────────────────────────────────────
-export const tool = { name: 'push' };
-
-// Опора. Значення беруться з tuning.js, але в режимі підбору
-// їх можна посунути мишкою просто в грі.
-const anchor = { x: T.anchor.x, y: T.anchor.y, radius: T.anchor.radius };
-let anchorHint = '';
+// Пензель: три розміри, перемикаються кнопками внизу екрана.
+const BRUSH_SIZES = (T.brush.sizes && T.brush.sizes.length) ? T.brush.sizes : [140, 240, 380];
+let brushIndex = Math.min(BRUSH_SIZES.length - 1, Math.max(0, T.brush.startIndex ?? 1));
 
 // ── Полотно й буфери ──────────────────────────────────────────
 let canvas = null, ctx = null;
@@ -72,6 +68,8 @@ const game = {
   previewLeft: 0,
   introT: 0,
   canEdit: false,
+  attempt: 0,         // яка це спроба на цьому чоботі, рахуючи з нуля
+  resultT0: 0,        // мить, коли показали результат раунду
   lastMatch: 0,
   lastPassed: false,
   lastPoints: 0,
@@ -399,7 +397,6 @@ function bindPointer() {
   canvas.addEventListener('pointerleave', () => { if (!drawing) pointerInside = false; });
 
   canvas.addEventListener('pointerdown', (e) => {
-    if (T.anchor.pickWithAlt && e.altKey) { moveAnchor(e); return; }
     if (!game.canEdit) return;
     canvas.setPointerCapture(e.pointerId);
     const p = toCanvas(e);
@@ -426,28 +423,6 @@ function bindPointer() {
   };
   canvas.addEventListener('pointerup', finish);
   canvas.addEventListener('pointercancel', finish);
-
-  canvas.addEventListener('wheel', (e) => {
-    if (!T.anchor.pickWithAlt || !e.altKey) return;
-    e.preventDefault();
-    anchor.radius = Math.max(0.01, Math.min(0.6,
-      anchor.radius * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
-    printAnchor();
-  }, { passive: false });
-}
-
-// Режим підбору опори: показуємо готовий рядок для tuning.js
-function moveAnchor(e) {
-  const b = toImage(toCanvas(e));
-  anchor.x = Math.max(0, Math.min(1, b.x / srcW));
-  anchor.y = Math.max(0, Math.min(1, b.y / srcH));
-  printAnchor();
-}
-
-function printAnchor() {
-  const r = (v) => v.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
-  anchorHint = `anchor: { x: ${r(anchor.x)}, y: ${r(anchor.y)}, radius: ${r(anchor.radius)} }`;
-  console.log('Опора — скопіюй у tuning.js:  ' + anchorHint);
 }
 
 function strokeTo(bx, by) {
@@ -462,7 +437,19 @@ function strokeTo(bx, by) {
   lastBX = bx; lastBY = by;
 }
 
-function radiusInImage() { return (T.brush.size / 2) / imgScale; }
+function brushSize() { return BRUSH_SIZES[brushIndex]; }
+
+// Яка кнопка пензля зараз вибрана і які взагалі є розміри —
+// потрібно сторінці, щоб намалювати кружечки правильного розміру.
+export function brushOptions() { return BRUSH_SIZES.slice(); }
+export function brushCurrent() { return brushIndex; }
+export function setBrush(i) {
+  if (i < 0 || i >= BRUSH_SIZES.length) return;
+  brushIndex = i;
+  notify();
+}
+
+function radiusInImage() { return (brushSize() / 2) / imgScale; }
 
 // ══════════════════════════════════════════════════════════════
 //  ПЕНЗЕЛЬ
@@ -493,13 +480,6 @@ function stamp(cx, cy, mvx, mvy) {
   const R2 = R * R;
   const expo = 1 + (1 - clamp01(T.brush.hardness)) * 3;
   const s = clamp01(T.brush.strength);
-  const heal = T.brush.restoreRate * s;
-  const isRestore = tool.name === 'restore';
-
-  // Опорна точка: чим ближче до неї, тим слабший пензель, у центрі — нуль
-  const ax = anchor.x * srcW, ay = anchor.y * srcH;
-  const ar = anchor.radius * Math.max(srcW, srcH);
-  const ar2 = ar * ar;
 
   for (let y = y0; y <= y1; y++) {
     const vy = y - cy;
@@ -508,24 +488,10 @@ function stamp(cx, cy, mvx, mvy) {
       const r2 = vx * vx + vy * vy;
       if (r2 >= R2) continue;
 
-      let w = Math.pow(1 - r2 / R2, expo);
-
-      const adx = x - ax, ady = y - ay;
-      const ad2 = adx * adx + ady * ady;
-      if (ad2 < ar2) {
-        const k = Math.sqrt(ad2) / ar;       // 0 у центрі опори, 1 на її краю
-        w *= k * k * (3 - 2 * k);            // плавний перехід
-      }
+      const w = Math.pow(1 - r2 / R2, expo);
       if (w < 0.0008) continue;
 
       const i = y * srcW + x;
-
-      if (isRestore) {
-        const keep = 1 - heal * w;
-        dispX[i] = prevX[i] * keep;
-        dispY[i] = prevY[i] * keep;
-        continue;
-      }
 
       const dx = mvx * s * w, dy = mvy * s * w;
       if (dx === 0 && dy === 0) continue;
@@ -612,8 +578,9 @@ function ensureWarp() { if (needsWarp) warp(); }
 //  ХІД ГРИ
 // ══════════════════════════════════════════════════════════════
 
-function beginRound(i) {
+function beginRound(i, again) {
   game.round = i;
+  game.attempt = again ? game.attempt + 1 : 0;
   dispX.fill(0); dispY.fill(0);
   undoStack.length = 0;
   needsWarp = true;
@@ -665,17 +632,17 @@ function finishRound() {
   game.score += game.lastPoints;
 
   game.phase = 'result';
+  game.resultT0 = performance.now();
   game.canEdit = false;
   notify();
 }
 
-// Одна кнопка на всі випадки — робить те, що доречно зараз
-export function action() {
-  if (game.phase === 'idle') return beginRound(0);
-  if (game.phase === 'done') { game.score = 0; return beginRound(0); }
-  if (game.phase !== 'result') return;
-
-  if (!game.lastPassed) return beginRound(game.round);       // той самий чобіт
+// Що робити після показу результату. Кнопки більше немає —
+// гра сама вирішує: перескласти той самий чобіт, взяти наступний
+// або закінчити гру.
+function afterResult() {
+  const tries = Math.max(1, T.round.attemptsPerBoot || 1);
+  if (!game.lastPassed && game.attempt + 1 < tries) return beginRound(game.round, true);
   if (game.round + 1 < boots.length) return beginRound(game.round + 1);
   game.phase = 'done';
   notify();
@@ -703,11 +670,12 @@ export function reset() {
   game.lastPassed = false;
   game.lastPoints = 0;
   game.canEdit = false;
-  game.phase = 'idle';
+  game.attempt = 0;
+  brushIndex = Math.min(BRUSH_SIZES.length - 1, Math.max(0, T.brush.startIndex ?? 1));
   if (dispX) { dispX.fill(0); dispY.fill(0); }
   undoStack.length = 0;
   needsWarp = true;
-  notify();
+  beginRound(0);          // кнопки «Почати» немає — раунд іде одразу
 }
 
 function updateTimers(now) {
@@ -718,6 +686,11 @@ function updateTimers(now) {
       game.phase = 'play';
       game.t0 = now;                  // робочий час стартує тільки тепер
     }
+    return;
+  }
+  if (game.phase === 'result') {
+    game.canEdit = false;
+    if ((now - game.resultT0) / 1000 >= (T.round.resultSeconds ?? 3.5)) afterResult();
     return;
   }
   if (game.phase !== 'play') { game.canEdit = false; return; }
@@ -756,6 +729,12 @@ export function getState() {
     points: game.lastPoints,
     score: game.score,
     canEdit: game.canEdit,
+    attempt: game.attempt,
+    attemptsPerBoot: Math.max(1, T.round.attemptsPerBoot || 1),
+    pass: boots[game.round]?.pass ?? T.round.passPercent,
+    brush: brushIndex,
+    brushSizes: BRUSH_SIZES,
+    introTotal: introTotal(),
   };
 }
 
@@ -789,19 +768,10 @@ function frame(now) {
   }
 
   if (T.compare.showCutLine && (game.phase === 'play' || game.phase === 'result')) drawCutLine();
-  if (T.anchor.show && (game.phase === 'play' || game.phase === 'result')) drawAnchor();
   if (game.phase === 'intro') drawIntro();
   if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
   if (game.phase === 'result') drawResult();
-  if (game.phase === 'idle') drawIdle();
-  if (game.phase === 'done') drawDone();
-  if (game.phase === 'play') drawPlayHud();
   if (game.canEdit && pointerInside) drawBrush();
-
-  if (T.anchor.pickWithAlt) {
-    text(anchorHint || 'Alt + клік — пересунути опору, Alt + колесо — радіус',
-         40, GAME.height - 34, anchorHint ? T.colors.good : T.colors.dim, 22);
-  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1061,24 +1031,6 @@ function drawCutLine() {
   text('вище не рахується', GAME.width - 40, y - 18, T.compare.cutLineColor, 20, 'right');
 }
 
-function drawAnchor() {
-  const x = imgX + anchor.x * srcW * imgScale;
-  const y = imgY + anchor.y * srcH * imgScale;
-  const r = anchor.radius * Math.max(srcW, srcH) * imgScale;
-
-  ctx.save();
-  ctx.strokeStyle = T.anchor.color;
-  ctx.globalAlpha = 0.35;
-  ctx.setLineDash([10, 10]);
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.restore();
-
-  ctx.fillStyle = T.anchor.color;
-  ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
-  text('опора', x, y - 26, T.anchor.color, 20, 'center');
-}
-
 // Кладемо чобіт просто на стопу: обидві форми вписані в один квадрат,
 // рівно так само, як їх потім порівнює підрахунок.
 function drawBootOnFoot(picture, frame, alpha) {
@@ -1090,9 +1042,6 @@ function drawBootOnFoot(picture, frame, alpha) {
     picture.width * frame.k * imgScale, picture.height * frame.k * imgScale);
   ctx.restore();
 }
-
-// Місце праворуч, де пишемо результат раунду
-function sideX() { return GAME.width * 0.84; }
 
 function drawIntro() {
   const I = T.intro, boot = boots[game.round], t = game.introT;
@@ -1113,11 +1062,6 @@ function drawIntro() {
     drawBootOnFoot(boot.img, roundFrame, stepAlpha(t, I.bootSeconds) * I.bootAlpha);
   }
 
-  textShade(0, 150);
-  text('Раунд ' + (game.round + 1) + ' / ' + boots.length, 40, 44, T.colors.dim, 24);
-  text(boot.name, 40, 78, T.colors.dim, 22);
-  text(t < I.bootSeconds ? T.texts.introBoot : T.texts.introOutline,
-       GAME.width / 2, 56, T.colors.ink, 30, 'center', 'bold');
 }
 
 function drawBootPreview() {
@@ -1133,35 +1077,6 @@ function drawBootPreview() {
   drawBootOnFoot(boots[game.round].img, roundFrame, a);
 }
 
-function drawPlayHud() {
-  textShade(0, 150);
-  const boot = boots[game.round];
-  text('Раунд ' + (game.round + 1) + ' / ' + boots.length, 40, 44, T.colors.dim, 24);
-  text(boot.name, 40, 78, T.colors.dim, 22);
-
-  const left = Math.ceil(game.timeLeft);
-  text(left + ' с', GAME.width / 2, 52, left <= 10 ? T.colors.bad : T.colors.ink, 44, 'center', 'bold');
-
-  if (game.previewLeft > 0) {
-    const p = Math.ceil(game.previewLeft);
-    text(T.texts.memorize + ' ' + p + ' с', GAME.width / 2, 100,
-         p <= 5 ? T.colors.bad : T.colors.dim, 24, 'center');
-  } else {
-    text(T.texts.fromMemory, GAME.width / 2, 100, T.colors.dim, 24, 'center');
-  }
-}
-
-function drawIdle() {
-  textShade(0, 140);
-  text(T.texts.idleTitle, GAME.width / 2, 56, T.colors.ink, 34, 'center', 'bold');
-  text(T.texts.idleHint, GAME.width / 2, 100, T.colors.dim, 24, 'center');
-}
-
-function drawDone() {
-  text(T.texts.finished, GAME.width / 2, GAME.height * 0.16, T.colors.good, 44, 'center', 'bold');
-  text('Очки: ' + game.score, GAME.width / 2, GAME.height * 0.16 + 56, T.colors.ink, 30, 'center');
-}
-
 // Чобіт лягає поверх стопи: обидва вписані в один квадрат
 function drawResult() {
   const boot = boots[game.round];
@@ -1170,18 +1085,33 @@ function drawResult() {
   if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, T.preview.resultAlpha);
   else drawBootOnFoot(boot.shape, roundFrame, T.preview.resultAlpha);
 
-  const x = sideX(), y = GAME.height * 0.30;
+  // Панель із відсотком — по центру внизу, щоб не лізла на стопу
+  // й не перекривала дівчинку праворуч.
+  const x = GAME.width / 2, y = GAME.height * 0.715;
   const col = game.lastPassed ? T.colors.good : T.colors.bad;
-  text(Math.round(game.lastMatch) + '%', x, y, col, 96, 'center', 'bold');
-  text(game.lastPassed ? T.texts.passed : T.texts.failed, x, y + 76, col, 30, 'center', 'bold');
-  text('потрібно ' + boot.pass + '%', x, y + 118, T.colors.dim, 24, 'center');
-  if (game.lastPoints) {
-    text('+' + game.lastPoints + ' очок', x, y + 168, T.colors.ink, 28, 'center', 'bold');
-  }
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(8, 7, 12, 0.72)';
+  ctx.fillRect(x - 330, y - 92, 660, 184);
+  ctx.strokeStyle = col;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - 330, y - 92, 660, 184);
+  ctx.restore();
+
+  text(Math.round(game.lastMatch) + '%', x, y - 30, col, 76, 'center', 'bold');
+  text(game.lastPassed ? T.texts.passed : T.texts.failed, x, y + 28, col, 28, 'center', 'bold');
+
+  const line = game.lastPoints
+    ? T.texts.points.replace('{n}', game.lastPoints)
+    : (!game.lastPassed && game.attempt + 1 < Math.max(1, T.round.attemptsPerBoot || 1)
+        ? T.texts.retry
+        : T.texts.need.replace('{pass}', boot.pass));
+  text(line, x, y + 66, T.colors.dim, 24, 'center');
 }
 
 function drawBrush() {
-  const r = T.brush.size / 2;
+  const r = brushSize() / 2;
   ctx.lineWidth = 3;
   ctx.strokeStyle = T.colors.brushShadow;
   ctx.beginPath(); ctx.arc(pointerX, pointerY, r + 1, 0, Math.PI * 2); ctx.stroke();
@@ -1195,8 +1125,6 @@ function drawBrush() {
 // ══════════════════════════════════════════════════════════════
 //  КНОПКИ
 // ══════════════════════════════════════════════════════════════
-
-export function setTool(name) { tool.name = name; }
 
 function pushUndo() {
   const n = srcW * srcH;

@@ -394,7 +394,8 @@ function paintMute(btn) {
 // Де яка музика доречна
 function trackFor(name) {
   if (name === 'game') return 'game';
-  if (name === 'menu' || name === 'leaderboard' || name === 'credits') return 'menu';
+  if (name === 'menu' || name === 'leaderboard' || name === 'credits' ||
+      name === 'result') return 'menu';
   return null;   // чорний екран і завантаження — тиша
 }
 
@@ -497,7 +498,8 @@ function bindButtons() {
     const helper = ['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock'];
     if (current === 'press' && !helper.includes(e.key)) { go('loading'); return; }
 
-    if (e.key === 'Escape' && (current === 'leaderboard' || current === 'credits')) go('menu');
+    if (e.key === 'Escape' &&
+        (current === 'leaderboard' || current === 'credits' || current === 'result')) go('menu');
   });
 }
 

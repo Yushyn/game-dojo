@@ -36,11 +36,12 @@ var FILES = [
   { path:'src/config.js',   mark:'1920',             need:'розмір 1920×1080' },
   { path:'src/tuning.js',   mark:'btnNewGame',       need:'блок screens' },
   { path:'src/game.js',     mark:'roundFrame',       need:'рушій гри' },
-  { path:'src/main.js',     mark:'data-tool',        need:'кнопки інструментів' },
+  { path:'src/main.js',     mark:'buildBrushes',     need:'кнопки розміру пензля' },
   { path:'src/db.js',       mark:'initDb',           need:'безпечне підключення бази' },
   { path:'assets/foot.png',          mark:null, need:'картинка ноги' },
   { path:'assets/background.png',    mark:null, need:'фон сцени' },
-  { path:'assets/girl.webm',         mark:null, need:'анімація дівчинки' },
+  { path:'assets/girl.webm',         mark:null, need:'анімація дівчинки, ролик 1' },
+  { path:'assets/girl2.webm',        mark:null, need:'анімація дівчинки, ролик 2' },
   { path:'assets/girl-sheet.webp',   mark:null, need:'її запасні кадри' },
   { path:'assets/pedestal.png',      mark:null, need:'шар пʼєдестала' },
   { path:'assets/boot1.png',         mark:null, need:'чобіт раунду 1' },
@@ -191,7 +192,7 @@ function finish() {
     import('./src/game.js' + stamp),
     import('./src/db.js' + stamp)
   ]).then(function (mods) {
-    var needGame = ['start','tool','setTool','undo','action','reset','getState'];
+    var needGame = ['start','undo','reset','getState','brushOptions','setBrush'];
     var needDb   = ['topScores','submitScore','initDb'];
     var lost = needGame.filter(function (n) { return !(n in mods[0]); })
       .map(function (n) { return 'game.js: ' + n; })

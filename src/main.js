@@ -1,7 +1,9 @@
-// Звʼязок сторінки з грою: екрани, кнопки інструментів, кнопка дії, лідерборд.
+// Звʼязок сторінки з грою: інтерфейс поверх полотна, екран результату,
+// лідерборд. Кнопок «Почати» й «Інструмент» більше немає — раунди йдуть
+// самі, а єдине, що вибирає гравець, це розмір пензля.
 
 import { TUNING } from './tuning.js';
-import { start, tool, setTool, undo, action, reset, getState } from './game.js';
+import { start, undo, reset, getState, brushOptions, setBrush } from './game.js';
 import { topScores, submitScore, initDb, dbReady } from './db.js';
 import { initScreens, showScreen, currentScreen } from './screens.js';
 
@@ -11,6 +13,11 @@ window.__gameBooted = true;
 
 const t = TUNING.texts;
 const $ = (id) => document.getElementById(id);
+
+// Підставляє числа в шаблон: fill('Round {n}/{total}', { n: 1, total: 2 })
+function fill(str, vals) {
+  return String(str || '').replace(/\{(\w+)\}/g, (m, k) => (k in vals ? vals[k] : m));
+}
 
 const missing = [];
 function put(id, prop, value) {
@@ -24,16 +31,12 @@ addEventListener('error', (e) => {
   if (s) s.textContent = 'Помилка: ' + e.message;
 });
 
-// ── Тексти ігрового екрана ────────────────────────────────────
+// ── Тексти ────────────────────────────────────────────────────
 document.title = t.title;
-put('title', 'textContent', t.title);
-put('hint', 'textContent', t.hint);
-put('tools-title', 'textContent', t.toolsTitle);
-put('tool-push', 'textContent', t.toolPush);
-put('tool-restore', 'textContent', t.toolRestore);
-put('board-title', 'textContent', t.boardTitle);
-put('name', 'placeholder', t.namePlaceholder);
-put('save', 'textContent', t.saveButton);
+put('s-result-title', 'textContent', t.resultTitle);
+put('s-result-label', 'textContent', t.resultScore);
+put('name',           'placeholder', t.namePlaceholder);
+put('save',           'textContent', t.saveButton);
 
 if (missing.length) {
   console.error('У index.html немає елементів:', missing.join(', '),
@@ -53,82 +56,123 @@ start(canvas, {
 
 // ── Екрани ────────────────────────────────────────────────────
 initScreens({
-  // екран завантаження чекає саме на цю відповідь
   isGameReady: () => getState().phase !== 'loading',
 
-  onNewGame:  () => reset(),          // «Нова гра» — очки з нуля
-  onLeaveGame: () => reset(),         // вийшли з гри в меню — раунд скидаємо
+  onNewGame:   () => reset(),   // «Нова гра» — очки з нуля, раунд стартує одразу
+  onLeaveGame: () => reset(),   // вийшли в меню — раунд скидаємо
   onOpenLeaderboard: () => refreshBoard(),
 });
 
-// ── Інструменти ───────────────────────────────────────────────
-const toolButtons = [...document.querySelectorAll('[data-tool]')];
-function selectTool(name) {
-  setTool(name);
-  toolButtons.forEach((b) => b.classList.toggle('on', b.dataset.tool === name));
-}
-toolButtons.forEach((b) => b.addEventListener('click', () => selectTool(b.dataset.tool)));
-selectTool(tool.name);
+// ══════════════════════════════════════════════════════════════
+//  КНОПКИ РОЗМІРУ ПЕНЗЛЯ
+//  Три восьмикутники внизу екрана. Кружечок усередині малюється за
+//  справжнім діаметром пензля з tuning.js, лише зменшений так, щоб
+//  найбільший саме вміщався в кнопку. Тому кружечки завжди чесно
+//  показують співвідношення розмірів: змінила числа — змінились і вони.
+// ══════════════════════════════════════════════════════════════
 
-// ── Кнопка дії ────────────────────────────────────────────────
-const actionBtn = $('action');
-actionBtn?.addEventListener('click', () => action());
+const BRUSH_LABELS = [t.brushSmall, t.brushMedium, t.brushBig];
+const brushBox = $('brushes');
+let brushButtons = [];
+
+function buildBrushes() {
+  if (!brushBox) return;
+  const sizes = brushOptions();
+  const max = Math.max(...sizes);
+
+  brushBox.innerHTML = '';
+  brushButtons = sizes.map((size, i) => {
+    const b = document.createElement('button');
+    b.className = 'sq';
+    b.type = 'button';
+    b.title = BRUSH_LABELS[i] || (size + ' px');
+    b.setAttribute('aria-label', b.title);
+
+    // 62 — найбільший кружечок у пікселях макета, щоб лишились поля
+    const d = Math.max(10, Math.round(62 * size / max));
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.width  = 'calc(var(--u) * ' + d + ')';
+    dot.style.height = 'calc(var(--u) * ' + d + ')';
+    b.appendChild(dot);
+
+    b.addEventListener('click', () => setBrush(i));
+    brushBox.appendChild(b);
+    return b;
+  });
+}
+buildBrushes();
 
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
-  if (e.key === '1') selectTool('push');
-  if (e.key === '2') selectTool('restore');
+  const n = Number(e.key);
+  if (n >= 1 && n <= brushButtons.length) setBrush(n - 1);
 });
 
-// ── Показ стану ───────────────────────────────────────────────
-// Гра сама повідомляє про зміни, а таймер оновлюємо щосекунди.
+// ══════════════════════════════════════════════════════════════
+//  ПОКАЗ СТАНУ
+// ══════════════════════════════════════════════════════════════
+
+const barEl = $('hud-bar');
+const timerEl = $('hud-timer');
+let resultShown = false;
+
 function render(s) {
   const st = s || getState();
 
-  put('score', 'textContent', st.score);
-  put('round', 'textContent', st.total ? (st.round + 1) + ' / ' + st.total : '—');
-  put('boot-name', 'textContent',
-      st.phase === 'intro' || st.phase === 'play' || st.phase === 'result' ? st.bootName : '—');
+  put('hud-round', 'textContent',
+      fill(t.hudRound, { n: st.round + 1, total: st.total || 1 }));
+  put('hud-goal', 'textContent', fill(t.hudGoal, { pass: st.pass }));
 
-  const timerEl = $('timer');
+  // Таймер і смужка. Під час вступу робочий час ще не йде — там
+  // пишемо, що зараз відбувається, а смужка стоїть порожня.
   if (timerEl) {
     if (st.phase === 'play') {
-      timerEl.textContent = Math.ceil(st.timeLeft) + ' с';
+      timerEl.textContent = fill(t.hudTimer, { sec: Math.ceil(st.timeLeft) });
       timerEl.classList.toggle('warn', st.timeLeft <= 10);
     } else if (st.phase === 'intro') {
-      timerEl.textContent = 'вступ';
+      timerEl.textContent = st.introT < TUNING.intro.bootSeconds ? t.introBoot : t.introOutline;
       timerEl.classList.remove('warn');
     } else {
-      timerEl.textContent = '—';
+      timerEl.textContent = fill(t.hudTimer, { sec: 0 });
       timerEl.classList.remove('warn');
     }
   }
 
-  if (actionBtn) {
-    let label = '', show = true;
-    if (st.phase === 'idle') label = t.btnStart;
-    else if (st.phase === 'result') label = st.passed
-      ? (st.round + 1 < st.total ? t.btnNext : t.btnStart)
-      : t.btnRetry;
-    else if (st.phase === 'done') label = t.btnAgain;
-    else show = false;
-    actionBtn.textContent = label;
-    actionBtn.style.display = show ? '' : 'none';
+  if (barEl) {
+    // Смужка наповнюється в міру того, як час спливає.
+    const total = TUNING.round.totalSeconds || 1;
+    const done = st.phase === 'play' ? 1 - st.timeLeft / total
+               : (st.phase === 'result' || st.phase === 'done') ? 1 : 0;
+    barEl.style.width = Math.max(0, Math.min(1, done)) * 100 + '%';
   }
 
-  toolButtons.forEach((b) => { b.disabled = !st.canEdit; });
+  brushButtons.forEach((b, i) => {
+    b.classList.toggle('on', i === st.brush);
+    b.disabled = !st.canEdit;
+  });
+
+  // Усі чоботи пройдено — самі переводимо на екран результату.
+  if (st.phase === 'done' && !resultShown && currentScreen() === 'game') {
+    resultShown = true;
+    put('s-result-score', 'textContent', st.score);
+    if (statusEl) statusEl.textContent = '';
+    showScreen('result');
+  }
+  if (st.phase !== 'done') resultShown = false;
 }
 
-setInterval(() => render(), 250);
+setInterval(() => render(), 200);
 render();
 
-// ── Лідерборд ─────────────────────────────────────────────────
-// Той самий список показується у двох місцях: у панелі збоку від
-// гри і на окремому екрані з меню.
+// ══════════════════════════════════════════════════════════════
+//  ЛІДЕРБОРД
+// ══════════════════════════════════════════════════════════════
+
 const nameEl = $('name'), saveBtn = $('save');
-const boards = [$('board'), $('board-full')].filter(Boolean);
+const boards = [$('board-full')].filter(Boolean);
 
 if (nameEl) {
   nameEl.value = localStorage.getItem('player') || '';
@@ -153,12 +197,12 @@ async function refreshBoard() {
 
 saveBtn?.addEventListener('click', async () => {
   const name = (nameEl?.value || '').trim();
-  if (!name) { statusEl.textContent = 'Впиши імʼя.'; nameEl?.focus(); return; }
+  if (!name) { statusEl.textContent = t.needName; nameEl?.focus(); return; }
   saveBtn.disabled = true;
-  statusEl.textContent = 'Зберігаю…';
+  statusEl.textContent = t.saving;
   const res = await submitScore(name, getState().score);
   saveBtn.disabled = false;
-  statusEl.textContent = res.ok ? 'Збережено.' : `Не збереглось: ${res.reason}`;
+  statusEl.textContent = res.ok ? t.saved : 'Не збереглось: ' + res.reason;
   if (res.ok) refreshBoard();
 });
 
