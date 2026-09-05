@@ -215,45 +215,55 @@ function buildLives() {
 buildLives();
 
 // ── Повноекранний ролик при втраті життя ──────────────────────
-// Якщо в tuning.js вказано відео, показуємо його поверх полотна.
-// Якщо картинку — її малює саме полотно, і сюди ми не лізем.
-const animEl = $('life-anim');
-const animSrc = (TUNING.lives?.anim || '');
-const animIsVideo = /\.(webm|mp4)$/i.test(animSrc);
+// У tuning.js це списки: перший рядок — на першу втрату життя,
+// другий — на другу. Якщо життів більше, ніж роликів, останній
+// повторюється. Один рядок замість списку теж працює.
+const animList  = [].concat(TUNING.lives?.anim || []);
+const soundList = [].concat(TUNING.lives?.animSound || []);
+const animEl    = $('life-anim');
+const soundEl   = $('life-sound');
 let animPlaying = false;
 
-if (animEl) {
-  if (animIsVideo) animEl.src = animSrc;
-  else animEl.remove();
-}
+const isVideo = (src) => /\.(webm|mp4)$/i.test(String(src));
+// Яку ногу зараз ріжуть, таким за рахунком і ролик.
+const pick = (list, i) => (list.length ? list[Math.min(i || 0, list.length - 1)] : '');
 
-// Звук до ролика — окремий канал. Якщо браузер його не пустить,
-// ролик усе одно покажеться: картинка від звуку не залежить.
-const animSound = $('life-sound');
-if (animSound) {
-  const src = TUNING.lives?.animSound || '';
-  if (src) {
-    animSound.src = src;
-    // Найчастіша причина тиші — файл просто не доїхав у assets.
-    // Хай про це буде видно в консолі, а не мовчазна загадка.
-    animSound.addEventListener('error', () => {
-      console.warn('Звук ролика не завантажився: ' + src +
-        ' — перевір, чи лежить цей файл у assets/');
-    });
-  } else {
-    animSound.remove();
-  }
-}
+// Якщо відео немає взагалі — заставку малює саме полотно,
+// і ці елементи тут зайві.
+if (animEl && !animList.some(isVideo)) animEl.remove();
+if (soundEl && !soundList.length) soundEl.remove();
 
-function showLifeAnim(on) {
-  if (!animIsVideo || !animEl || on === animPlaying) return;
+// Другий ролик підвантажуємо заздалегідь. Інакше на другій
+// втраті життя була б пауза на завантаження — саме тоді, коли
+// на екрані має падати ніж.
+animList.concat(soundList).forEach((src) => {
+  if (!src) return;
+  const el = document.createElement(isVideo(src) ? 'video' : 'audio');
+  el.preload = 'auto';
+  el.src = src;
+});
+
+// Найчастіша причина тиші — файл просто не доїхав у assets.
+// Хай про це буде видно в консолі, а не мовчазна загадка.
+soundEl?.addEventListener('error', () => {
+  console.warn('Звук ролика не завантажився: ' + soundEl.getAttribute('src') +
+    ' — перевір, чи лежить цей файл у assets/');
+});
+
+function showLifeAnim(on, idx) {
+  if (!animEl || on === animPlaying) return;
+  const src = pick(animList, idx);
+  if (on && !isVideo(src)) return;      // тут картинка — її малює полотно
+
   animPlaying = on;
   animEl.hidden = !on;
+
   if (on) {
+    if (animEl.getAttribute('src') !== src) animEl.src = src;
     try { animEl.currentTime = 0; } catch (e) {}
     animEl.play().catch(() => {});
     duckMusic(true);      // музика рівня стихає, щоб було чути ролик
-    playAnimSound();
+    playAnimSound(idx);
   } else {
     animEl.pause();
     stopAnimSound();
@@ -261,19 +271,19 @@ function showLifeAnim(on) {
   }
 }
 
-function playAnimSound() {
-  const a = $('life-sound');
-  if (!a || !a.src || isMuted()) return;   // вимикач Sound глушить і його
-  a.volume = TUNING.lives?.animSoundVolume ?? 0.9;
-  try { a.currentTime = 0; } catch (e) {}
-  a.play().catch(() => {});
+function playAnimSound(idx) {
+  const src = pick(soundList, idx);
+  if (!soundEl || !src || isMuted()) return;   // вимикач Sound глушить і його
+  if (soundEl.getAttribute('src') !== src) soundEl.src = src;
+  soundEl.volume = TUNING.lives?.animSoundVolume ?? 0.9;
+  try { soundEl.currentTime = 0; } catch (e) {}
+  soundEl.play().catch(() => {});
 }
 
 function stopAnimSound() {
-  const a = $('life-sound');
-  if (!a) return;
-  a.pause();
-  try { a.currentTime = 0; } catch (e) {}
+  if (!soundEl) return;
+  soundEl.pause();
+  try { soundEl.currentTime = 0; } catch (e) {}
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -331,7 +341,7 @@ function render(s) {
   lifeIcons.forEach((im, i) => im.classList.toggle('gone', i >= st.lives));
 
   // Другий запобіжник: ролик і його звук — лише на екрані гри.
-  showLifeAnim(!!st.showAnim && currentScreen() === 'game');
+  showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);
 
   // Життя скінчились — вікно програшу
   if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {

@@ -58,12 +58,33 @@ export const TUNING = {
     // один-єдиний, без запасного, а mp4 розуміють усі браузери.
     // webm поруч у папці лежить — якщо демо буде тільки в Chrome,
     // можна вписати його й заощадити сотню кілобайт.
-    anim:        'assets/auch.mp4',
-    animSeconds: 6.2,   // ролик триває 6.1 с; менше — обірве його
+    // Ролики за списком: перший рядок — на першу втрату життя,
+    // другий — на другу, і так далі. Якщо життів більше, ніж
+    // роликів, останній повторюється.
+    //
+    // Формат mp4, а не легший webm: файл підставляється один, без
+    // запасного, а mp4 розуміють усі браузери. Обидва webm лежать
+    // поруч — якщо демо тільки в Chrome, впиши їх і заощадиш
+    // третину ваги.
+    anim: [
+      'assets/auch.mp4',      // перша нога
+      'assets/auch_2.mp4',    // друга нога
+    ],
 
-    // Звук до цього ролика. Лежить окремим файлом, а не всередині
-    // відео: так його глушить спільний вимикач Sound у меню.
-    animSound:       'assets/auch_.mp3',
+    // Скільки ролик тримається на екрані. Одне число на всі:
+    // беремо за найдовшим, бо обидва закінчуються чорним кадром
+    // і зайва частка секунди чорноти непомітна.
+    // Найдовше тут — звук другого ролика, 6.37 с.
+    animSeconds: 6.4,
+
+    // Звук до роликів, у тому ж порядку. Лежить окремими файлами,
+    // а не всередині відео: так його глушить спільний вимикач
+    // Sound у меню, і якщо браузер не пустить звук — картинка
+    // все одно покажеться.
+    animSound: [
+      'assets/auch_.mp3',
+      'assets/auch2_audio.mp3',
+    ],
     animSoundVolume: 0.9,   // 0..1
   },
 
@@ -99,17 +120,17 @@ export const TUNING = {
   //             раунду. Пиши англійською, як і решта написів.
   boots: [
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
-      name: 'Leather Ankle Boot', passPercent: 75  },
+      name: 'Leather Ankle Boot', passPercent: 78 },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
-      name: 'Rubber Duck',        passPercent: 70, cutOffset: 0.15  },
+      name: 'Rubber Duck',        passPercent: 73 },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
-      name: 'Trojan Horse',       passPercent: 45, cutOffset: 0.15 },
+      name: 'Trojan Horse',       passPercent: 35 },
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
-      name: 'Trail Sneaker',      passPercent: 75 },
+      name: 'Trail Sneaker',      passPercent: 79 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
-      name: 'Nightshade Heel',    passPercent: 50, cutOffset: 0.10 },
+      name: 'Nightshade Heel',    passPercent: 64 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
-      name: 'Jester Slipper',     passPercent: 55 },
+      name: 'Jester Slipper',     passPercent: 79 },
   ],
 
   // ── ДЕ МОЖЕ СТОЯТИ ЧОБІТ ─────────────────────────────────────
@@ -173,8 +194,8 @@ export const TUNING = {
     // Без цього нога наче не падає, а просто проявляється.
     dropShadow: {
       on:       true,
-      alpha:    0.5,  // наскільки темна тінь у мить приземлення
-      width:    0.5,  // ширина відносно ширини стопи
+      alpha:    0.55,  // наскільки темна тінь у мить приземлення
+      width:    0.62,  // ширина відносно ширини стопи
       height:   0.055, // висота (тінь пласка, це еліпс)
       spread:   2.4,   // у скільки разів вона ширша, коли нога вгорі
     },
@@ -365,7 +386,7 @@ export const TUNING = {
     // ні для стопи, ні для чобота.
     cutAboveBoot: true,
     cutOffset:    0,     // зсув лінії, у частках висоти чобота (+ вниз)
-    showCutLine:  true, // показувати червону лінію на екрані
+    showCutLine:  false, // показувати червону лінію на екрані
     cutLineColor: 'rgba(255, 90, 90, 0.45)',
   },
 
@@ -392,8 +413,7 @@ export const TUNING = {
     // Якщо переекспортуєш аркуш — звір ці числа з новим файлом.
     // Вони в пікселях самої картинки, не екрана.
     loadingArt: {
-      // Одне ім'я або список: береться перше, за яким є файл.
-
+      // Одне ім'я або список: береться перше, за яким є файл.
       src:    ['assets/RedFeet.png', 'assets/loading-feet.png'],
       width:  101,   // розмір аркуша
       height: 440,
@@ -544,8 +564,7 @@ export const TUNING = {
     // червоним, а не синім, щоб не вибивався зі стилю.
     overlay:     '#b02a2a',
     good:        '#7ee787',
-    bad:         '#ff7a7a',
-
+    bad:         '#ff7a7a',
     dying:       '#c02020', // яким кольором заливається нога при втраті життя
     ink:         '#e8e6f0',
     dim:         '#8b869e',
