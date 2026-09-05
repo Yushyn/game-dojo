@@ -98,6 +98,7 @@ const game = {
   paused: false,      // час стоїть: відкрите вікно «вийти в меню?»
   resultT0: 0,        // мить, коли показали результат раунду
   lastMatch: 0,
+  lastOutside: 0,     // скільки відсотків стопи лишилось поза чоботом
   lastPassed: false,
   lastPoints: 0,
 };
@@ -585,16 +586,28 @@ function bootGrid(boot, fr) {
 }
 
 // Спільна площа поділена на загальну
-function overlapPercent(a, b) {
-  if (!a || !b) return 0;
-  let inter = 0, uni = 0;
+// Два числа за один прохід сіткою:
+//   match   — відсоток збігу форм. Це перетин, поділений на обʼєднання:
+//             штрафує і за те, чого стопі бракує, і за те, що вилізло.
+//             Саме його гравець бачить і за ним зараховується раунд.
+//   outside — яка частка САМОЇ СТОПИ лишилась поза чоботом, у відсотках.
+//             0 означає, що стопа цілком усередині.
+function matchStats(a, b) {
+  if (!a || !b) return { match: 0, outside: 0 };
+  let inter = 0, uni = 0, foot = 0, out = 0;
   for (let i = 0; i < a.length; i++) {
     const x = a[i], y = b[i];
     if (x && y) inter++;
     if (x || y) uni++;
+    if (x) { foot++; if (!y) out++; }
   }
-  return uni ? (inter / uni) * 100 : 0;
+  return {
+    match: uni ? (inter / uni) * 100 : 0,
+    outside: foot ? (out / foot) * 100 : 0,
+  };
 }
+
+function overlapPercent(a, b) { return matchStats(a, b).match; }
 
 // ══════════════════════════════════════════════════════════════
 //  МИША
@@ -846,10 +859,19 @@ function stepAlpha(t, len) {
 function finishRound() {
   ensureWarp();
   const boot = boots[game.round];
-  game.lastMatch = overlapPercent(footGrid(), roundTarget);
+  const st = matchStats(footGrid(), roundTarget);
+  game.lastMatch = st.match;
+  game.lastOutside = st.outside;
   game.lastPassed = game.lastMatch >= boot.pass;
-  game.lastPoints = game.lastPassed
-    ? Math.round(game.lastMatch * T.round.pointsPerPercent) : 0;
+
+  // Очки: скільки дає повний збіг, помножене на відсоток збігу,
+  // мінус штраф за кожен відсоток стопи, що лишився поза чоботом.
+  // Не влучив у поріг — нуль, скільки б там не було збігу.
+  const R = T.round;
+  const full    = R.pointsForFullMatch ?? 1000;
+  const perOut  = R.pointsPerOutside ?? 10;
+  const earned  = full * (game.lastMatch / 100) - perOut * game.lastOutside;
+  game.lastPoints = game.lastPassed ? Math.max(0, Math.round(earned)) : 0;
   game.score += game.lastPoints;
 
   game.phase = 'result';
@@ -933,6 +955,7 @@ export function reset() {
   game.score = 0;
   game.round = 0;
   game.lastMatch = 0;
+  game.lastOutside = 0;
   game.lastPassed = false;
   game.lastPoints = 0;
   game.canEdit = false;
@@ -1051,6 +1074,7 @@ export function getState() {
     bootVisible: game.phase === 'play' && game.previewLeft > 0,
     match: game.lastMatch,
     passed: game.lastPassed,
+    outside: game.lastOutside,
     points: game.lastPoints,
     score: game.score,
     canEdit: game.canEdit,
