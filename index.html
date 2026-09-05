@@ -64,11 +64,6 @@
     overflow: hidden;
     border: 1px solid #241a26;
   }
-  .frame-dark {
-    background:
-      radial-gradient(70% 55% at 50% 42%, #221327 0%, rgba(10,8,14,0) 70%),
-      var(--night);
-  }
   .frame-art {
     background: var(--night) center / cover no-repeat;
   }
@@ -116,18 +111,36 @@
   .load-note {
     font-family: var(--prose); font-style: italic;
     font-size: clamp(15px, 1.5vw, 21px);
-    color: var(--ash); margin: 0 0 22px;
+    color: var(--ash); margin: 0;
   }
-  .load-track {
-    width: min(360px, 60%); height: 1px;
-    background: rgba(236,227,212,.14);
-    position: relative; overflow: hidden;
+  /* Екран завантаження — теж суцільно чорний, без рамки:
+     червоне на чорному читається найкраще. */
+  .screen-loading.on { background: #000; padding: 0; }
+  .load-block { display: flex; flex-direction: column; align-items: center; }
+
+  /* Сліди. Кожен шар — та сама картинка, обрізана по одному
+     відбитку, і вони проявляються знизу вгору один за одним. */
+  .feet {
+    position: relative;
+    height: clamp(240px, 52vh, 460px);
+    aspect-ratio: 101 / 440;
+    margin-bottom: 28px;
   }
-  .load-fill {
-    display: block; height: 100%; width: 0%;
-    background: linear-gradient(90deg, rgba(216,171,99,.3), var(--candle-lit));
-    box-shadow: 0 0 14px rgba(216,171,99,.7);
-    transition: width .25s linear;
+  .feet i {
+    position: absolute; inset: 0;
+    background: center / contain no-repeat;
+    opacity: 0;
+    /* світіння, щоб бліді відбитки не тонули в чорному */
+    filter: drop-shadow(0 0 9px rgba(255, 40, 40, .5));
+    animation: stepUp var(--cycle, 2.6s) linear infinite;
+    animation-delay: var(--delay, 0s);
+  }
+  @keyframes stepUp {
+    0%   { opacity: 0 }
+    9%   { opacity: 1 }
+    68%  { opacity: 1 }
+    84%  { opacity: 0 }
+    100% { opacity: 0 }
   }
   .load-pct {
     font-family: var(--mono); font-size: 12px; letter-spacing: .2em;
@@ -308,6 +321,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    .feet i { animation: none; opacity: 1; }   /* просто показуємо весь слід */
   }
 </style>
 </head>
@@ -325,12 +339,11 @@
 <!-- ══ 2. ЗАВАНТАЖЕННЯ ═══════════════════════════════════════════
      Смужка показує справжній прогрес: фон, стопа, чоботи. -->
 <section class="screen screen-loading" data-screen="loading">
-  <div class="frame frame-dark">
-    <div class="center">
-      <p class="load-note" id="s-load-note">Готуємо сцену</p>
-      <div class="load-track"><i class="load-fill" id="s-load-fill"></i></div>
-      <p class="load-pct" id="s-load-pct">0%</p>
-    </div>
+  <div class="load-block">
+    <!-- Сліди збирає src/screens.js з одного аркуша assets/loading-feet.png -->
+    <div class="feet" id="s-feet"></div>
+    <p class="load-note" id="s-load-note">Готуємо сцену</p>
+    <p class="load-pct" id="s-load-pct">0%</p>
   </div>
 </section>
 

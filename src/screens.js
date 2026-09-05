@@ -56,6 +56,7 @@ export function initScreens(callbacks) {
 
   fillTexts();
   paintArt();
+  buildFeet();
   bindButtons();
 
   showScreen('press');
@@ -93,6 +94,44 @@ function fillTexts() {
         list.appendChild(p);
       });
     });
+  }
+}
+
+// ── Сліди на екрані завантаження ──────────────────────────────
+// Аркуш один, а відбитків на ньому вісім. Замість того щоб різати
+// картинку на файли, ми кладемо її вісім разів і кожному шару
+// показуємо лише його відбиток. Далі вони по черзі проступають
+// знизу вгору — виходить хода.
+function buildFeet() {
+  const box = $('s-feet');
+  const A = S.loadingArt;
+  if (!box || !A) return;
+
+  box.style.setProperty('--cycle', A.cycleSeconds + 's');
+  box.innerHTML = '';
+
+  const pause = A.cycleSeconds / A.count;   // затримка між кроками
+
+  // Рахуємо знизу вгору: перший крок — найнижчий відбиток.
+  for (let i = 0; i < A.count; i++) {
+    const fromTop = A.count - 1 - i;                    // номер зверху
+    const isRight = (fromTop % 2 === 0) === !!A.topIsRight;
+    const [x1, x2] = isRight ? A.rightX : A.leftX;
+
+    const yTop = A.firstY + fromTop * A.stepY;
+    const yBot = Math.min(yTop + A.printHeight, A.height);
+
+    const pc = (v, whole) => (v / whole * 100).toFixed(3) + '%';
+
+    const layer = document.createElement('i');
+    layer.style.backgroundImage = 'url("' + A.src + '")';
+    // inset(зверху справа знизу зліва) — лишаємо видимим один відбиток
+    layer.style.clipPath = 'inset(' + pc(yTop, A.height) + ' ' +
+                                      pc(A.width - x2, A.width) + ' ' +
+                                      pc(A.height - yBot, A.height) + ' ' +
+                                      pc(x1, A.width) + ')';
+    layer.style.setProperty('--delay', (i * pause).toFixed(3) + 's');
+    box.appendChild(layer);
   }
 }
 
@@ -191,6 +230,11 @@ function runLoading() {
 
     const ready  = real >= 1 && elapsed >= minMs;
     const giveUp = elapsed >= stopMs;
+
+    // Поки не готові — тримаємо смужку трохи нижче кінця, інакше
+    // вона доповзає до ста сама й екран зникає раніше часу.
+    const cap = (ready || giveUp) ? 1 : 0.985;
+    shown = Math.min(shown, cap);
 
     if (ready || giveUp) shown = 1;
 
