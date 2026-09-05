@@ -99,17 +99,17 @@ export const TUNING = {
   //             раунду. Пиши англійською, як і решта написів.
   boots: [
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
-      name: 'Leather Ankle Boot', passPercent: 90 },
+      name: 'Leather Ankle Boot', passPercent: 75  },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
-      name: 'Rubber Duck',        passPercent: 95 },
+      name: 'Rubber Duck',        passPercent: 70, cutOffset: 0.15  },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
-      name: 'Trojan Horse',       passPercent: 45 },
+      name: 'Trojan Horse',       passPercent: 45, cutOffset: 0.15 },
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
-      name: 'Trail Sneaker',      passPercent: 79 },
+      name: 'Trail Sneaker',      passPercent: 75 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
-      name: 'Nightshade Heel',    passPercent: 64 },
+      name: 'Nightshade Heel',    passPercent: 50, cutOffset: 0.10 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
-      name: 'Jester Slipper',     passPercent: 79 },
+      name: 'Jester Slipper',     passPercent: 55 },
   ],
 
   // ── ДЕ МОЖЕ СТОЯТИ ЧОБІТ ─────────────────────────────────────
@@ -173,8 +173,8 @@ export const TUNING = {
     // Без цього нога наче не падає, а просто проявляється.
     dropShadow: {
       on:       true,
-      alpha:    0.2,  // наскільки темна тінь у мить приземлення
-      width:    0.3,  // ширина відносно ширини стопи
+      alpha:    0.5,  // наскільки темна тінь у мить приземлення
+      width:    0.5,  // ширина відносно ширини стопи
       height:   0.055, // висота (тінь пласка, це еліпс)
       spread:   2.4,   // у скільки разів вона ширша, коли нога вгорі
     },
