@@ -122,13 +122,13 @@ export const TUNING = {
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
       name: 'Leather Ankle Boot', passPercent: 78 },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
-      name: 'Rubber Duck',        passPercent: 73 },
+      name: 'Rubber Duck',        passPercent: 73, cutOffset: 0.12 },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
-      name: 'Trojan Horse',       passPercent: 35 },
+      name: 'Trojan Horse',       passPercent: 35, cutOffset: 0.10 },
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
       name: 'Trail Sneaker',      passPercent: 79 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
-      name: 'Nightshade Heel',    passPercent: 64 },
+      name: 'Nightshade Heel',    passPercent: 64, cutOffset: 0.10 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
       name: 'Jester Slipper',     passPercent: 79 },
   ],
@@ -310,7 +310,7 @@ export const TUNING = {
     // За таких значень верх гомілки трохи виходить за екран — так само,
     // як на референсі. Хочеш бачити ногу цілком — постав 0.73.
 
-    shadow:        false, // мʼяка тінь під стопою. У цьому рендері вона вже
+    shadow:        true, // мʼяка тінь під стопою. У цьому рендері вона вже
                           // намальована художником, тому вимкнена.
     shadowWidth:   0.62,  // ширина тіні відносно ширини стопи
     shadowHeight:  0.05,  // висота тіні відносно висоти стопи
@@ -386,7 +386,7 @@ export const TUNING = {
     // ні для стопи, ні для чобота.
     cutAboveBoot: true,
     cutOffset:    0,     // зсув лінії, у частках висоти чобота (+ вниз)
-    showCutLine:  false, // показувати червону лінію на екрані
+    showCutLine:  true, // показувати червону лінію на екрані
     cutLineColor: 'rgba(255, 90, 90, 0.45)',
   },
 
@@ -413,7 +413,8 @@ export const TUNING = {
     // Якщо переекспортуєш аркуш — звір ці числа з новим файлом.
     // Вони в пікселях самої картинки, не екрана.
     loadingArt: {
-      // Одне ім'я або список: береться перше, за яким є файл.
+      // Одне ім'я або список: береться перше, за яким є файл.
+
       src:    ['assets/RedFeet.png', 'assets/loading-feet.png'],
       width:  101,   // розмір аркуша
       height: 440,
@@ -564,7 +565,8 @@ export const TUNING = {
     // червоним, а не синім, щоб не вибивався зі стилю.
     overlay:     '#b02a2a',
     good:        '#7ee787',
-    bad:         '#ff7a7a',
+    bad:         '#ff7a7a',
+
     dying:       '#c02020', // яким кольором заливається нога при втраті життя
     ink:         '#e8e6f0',
     dim:         '#8b869e',
