@@ -194,7 +194,11 @@ function prepBoot(def, img) {
     img,
     shape: makeSilhouette(img, T.colors.overlay),   // для накладання на стопу
     mask, mw: w, mh: h,
-    bbox: bb && { cx: bb.cx * back, cy: bb.cy * back, w: bb.w * back, h: bb.h * back },
+    scale:   typeof def.scale === 'number' ? def.scale : 1,
+    offsetX: typeof def.offsetX === 'number' ? def.offsetX : 0,
+    offsetY: typeof def.offsetY === 'number' ? def.offsetY : 0,
+    bbox: bb && { cx: bb.cx * back, cy: bb.cy * back,
+                  w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back },
   };
 }
 
@@ -259,8 +263,16 @@ function bboxOf(mask, W, H) {
 // за стопою, і гравцеві не було б до чого підлаштовуватись.
 function frameFor(boot) {
   if (!footBB || !boot.bbox) return null;
-  const k = Math.max(footBB.w, footBB.h) / Math.max(boot.bbox.w, boot.bbox.h);
-  return { k, dx: footBB.cx - boot.bbox.cx * k, dy: footBB.cy - boot.bbox.cy * k };
+
+  // Прикладаємо по ДОВЖИНІ стопи, а підошву чобота ставимо на ту саму
+  // землю, що й підошву стопи. Раніше рівняли по більшій стороні — і чобіт
+  // роздувався на всю ногу, бо стопа з гомілкою висока, а чобіт широкий.
+  const k = (footBB.w / boot.bbox.w) * boot.scale;
+  return {
+    k,
+    dx: footBB.cx - boot.bbox.cx * k + boot.offsetX * footBB.w,
+    dy: (footBB.y1 + 1) - boot.bbox.bottom * k + boot.offsetY * footBB.h,
+  };
 }
 
 // Силует стопи на сітці, натягнутій на весь буфер.
