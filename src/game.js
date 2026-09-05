@@ -54,8 +54,9 @@ let hooks = {};
 // ── Чоботи ────────────────────────────────────────────────────
 let boots = [];
 let bgImage = null;      // фон, якщо є
-let girlVideo = null;    // те з двох відео, яке зараз показуємо
-let girlSpare = null;    // друге, напоготові на початку — щоб цикл не спотикався
+let girlEls = [];        // по одному <video> на кожен ролик анімації
+let girlCur = 0;         // який ролик зараз основний
+let girlNext = -1;       // який проявляється поверх нього, або -1
 let girlSheet = null;    // спрайтшит: запасний варіант, якщо відео не пішло
 let girlT0 = 0;          // мить, коли її анімація почалась — для спрайтшита
 let pedImage = null;     // окремий шар пʼєдестала поверх неї
@@ -687,10 +688,11 @@ export function reset() {
   // з меню). Саме тут відлік анімації дівчинки починається спочатку,
   // щоб гравець завжди бачив її з першого кадру, а не з середини циклу.
   girlT0 = performance.now();
-  if (girlVideo) {
+  if (girlEls.length) {
     try {
-      girlVideo.currentTime = 0; girlVideo.play();
-      if (girlSpare) { girlSpare.pause(); girlSpare.currentTime = 0; }
+      girlCur = 0; girlNext = -1;
+      girlEls.forEach((e, i) => { e.pause(); e.currentTime = 0; });
+      girlEls[0].play();
     } catch (e) {}
   }
 
@@ -818,70 +820,90 @@ function frame(now) {
 //  і замість дівчинки був би чорний прямокутник. У такому разі тихо
 //  переходимо на спрайтшит.
 
-//  Чому два відео, а не одне зациклене.
+//  ЯК ЦЕ ПРАЦЮЄ
 //
-//  Вбудований loop у браузера — це справжнє перемотування: він зупиняє
-//  відтворення, перемотує на початок і запускає знову. Виміряно: на цій
-//  анімації пауза виходила 90–150 мс. Око читає її як ривок, і жодні
-//  правки самого відео тут не допоможуть — вміст ні до чого.
+//  Роликів кілька, і вони йдуть по колу: перший, другий, знову перший.
+//  На кожен заведено окремий <video>. Той, що не грає, стоїть на паузі
+//  рівно на нульовому кадрі — розкодований і готовий стартувати миттєво.
 //
-//  Тому тримаємо дві копії. Одна грає, друга стоїть на паузі рівно
-//  на нульовому кадрі, вже розкодована. Коли перша доходить до кінця,
-//  ми просто перемикаємось на другу — вона починає з місця, а не
-//  з перемотування. Та, що відпрацювала, тим часом сама готується
-//  до наступного разу: у неї на це є цілий цикл.
+//  Чому не вбудований loop у браузера: він робить справжнє перемотування,
+//  зупиняє відтворення й запускає наново. Виміряно — пауза 136-249 мс,
+//  до двох з половиною кадрів застигання. Око читає це як ривок.
+//
+//  Чому перехід розчиненням, а не встик: ролики намальовані окремо,
+//  і поза в кінці одного не збігається з позою на початку іншого.
+//  Виміряно — різниця вчетверо більша за звичайний крок між кадрами.
+//  Розчинення за півсекунди розмазує цю відмінність так, що її не видно.
 
 function loadGirl() {
   const G = T.girl;
+  const list = (G.clips && G.clips.length) ? G.clips : [{ video: G.video }];
   let ready = 0, failed = false;
 
-  const make = () => {
+  const els = list.map((cfg) => {
     const v = document.createElement('video');
     v.muted = true; v.loop = false; v.playsInline = true;
     v.preload = 'auto';
     v.playbackRate = G.speed || 1;
+    v._cfg = cfg;
     v.addEventListener('error', () => {
       if (failed) return;
       failed = true;
       console.warn('Відео дівчинки не пішло, беру спрайтшит');
       useGirlSheet();
     });
-    v.src = G.video;
+    v.addEventListener('loadeddata', () => {
+      if (++ready < list.length || failed) return;
+      if (!checkAlpha(els[0])) {
+        failed = true;
+        console.warn('Браузер не тягне прозорість у webm — беру спрайтшит');
+        useGirlSheet();
+        return;
+      }
+      girlEls = els;
+      girlCur = 0; girlNext = -1;
+      // Ручка для перевірки в консолі: __girl() покаже, який ролик грає
+      try { window.__girlEls = girlEls; window.__girl = () => ({ cur: girlCur, next: girlNext,
+        els: girlEls.map((e) => ({ src: e.src.split('/').pop(),
+          t: +e.currentTime.toFixed(2), dur: +(e.duration || 0).toFixed(2),
+          paused: e.paused })) }); } catch (e) {}
+      els.forEach((e, i) => { try { e.currentTime = 0; if (i) e.pause(); } catch (err) {} });
+      els[0].play().catch(() => {});
+    });
+    v.src = cfg.video;
     return v;
-  };
-
-  const a = make(), b = make();
-
-  const onReady = () => {
-    if (++ready < 2 || failed) return;
-    if (!checkAlpha(a)) {
-      failed = true;
-      console.warn('Браузер не тягне прозорість у webm — беру спрайтшит');
-      useGirlSheet();
-      return;
-    }
-    girlVideo = a;
-    girlSpare = b;
-    try { b.currentTime = 0; b.pause(); } catch (e) {}
-    a.play().catch(() => {});
-  };
-
-  a.addEventListener('loadeddata', onReady);
-  b.addEventListener('loadeddata', onReady);
+  });
 }
 
-// Перемикання на другу копію за мить до кінця першої
+// Слідкуємо за тим, коли пора починати перехід і коли міняти основний ролик
 function girlTick() {
-  const v = girlVideo, w = girlSpare;
-  if (!v || !w || !v.duration) return;
+  if (!girlEls.length) return;
+  // якщо ролик один — просто заводимо його наново, коли догрався
+  if (girlEls.length === 1) {
+    const only = girlEls[0];
+    if (only && only.ended) { try { only.currentTime = 0; } catch (e) {} only.play().catch(() => {}); }
+    return;
+  }
+  const cur = girlEls[girlCur];
+  if (!cur || !cur.duration) return;
 
-  const lead = T.girl.switchLead ?? 0.02;
-  if (v.currentTime < v.duration - lead && !v.ended) return;
+  const cross = Math.max(0.05, T.girl.crossSeconds ?? 0.5);
+  const left = cur.duration - cur.currentTime;
 
-  girlVideo = w;
-  girlSpare = v;
-  w.play().catch(() => {});
-  try { v.pause(); v.currentTime = 0; } catch (e) {}   // готуємо до наступного разу
+  // пора підключати наступний і починати розчинення
+  if (girlNext < 0 && (left <= cross || cur.ended)) {
+    girlNext = (girlCur + 1) % girlEls.length;
+    const nx = girlEls[girlNext];
+    try { nx.currentTime = 0; } catch (e) {}
+    nx.play().catch(() => {});
+  }
+
+  // поточний догрався — він стає запасним, наступний основним
+  if (girlNext >= 0 && (cur.ended || left <= 0.01)) {
+    try { cur.pause(); cur.currentTime = 0; } catch (e) {}
+    girlCur = girlNext;
+    girlNext = -1;
+  }
 }
 
 // Чи справді видно прозорість: кут кадру має бути порожнім
@@ -899,21 +921,24 @@ function checkAlpha(v) {
 }
 
 function useGirlSheet() {
-  girlVideo = null;
+  girlEls = [];
   if (girlSheet) return;
   loadImage(T.girl.sheet)
     .then((im) => { girlSheet = im; girlT0 = performance.now(); })
     .catch((e) => console.warn('Дівчинка не завантажилась зовсім:', e.message));
 }
 
-// Куди її класти на екрані — однаково для відео й для спрайтшита
-function girlBox() {
+// Куди класти конкретний ролик. У кожного своє місце, бо аніматор
+// рендерить їх у різних кадрах — інакше дівчинка стрибала б на переході.
+function girlBox(cfg, aspect) {
   const G = T.girl;
-  const h = GAME.height * G.heightPercent;
-  const w = h * (girlAspect || 0.6846);
-  return { x: GAME.width * G.centerX - w / 2, y: GAME.height * G.bottomY - h, w, h };
+  const hp = cfg?.heightPercent ?? G.heightPercent;
+  const cx = cfg?.centerX ?? G.centerX;
+  const by = cfg?.bottomY ?? G.bottomY;
+  const h = GAME.height * hp;
+  const w = h * (aspect || 0.6846);
+  return { x: GAME.width * cx - w / 2, y: GAME.height * by - h, w, h };
 }
-let girlAspect = 0;
 
 // Запасний шлях: усі кадри лежать поруч в одній картинці, показуємо
 // потрібний прямокутник. Кадр рахується від часу, тому швидкість не
@@ -925,26 +950,46 @@ function drawGirl(now) {
   const G = T.girl;
   if (!G || !G.show) return;
 
-  if (girlVideo && girlVideo.readyState >= 2) {
+  if (girlEls.length) {
     girlTick();
-    girlAspect = girlVideo.videoWidth / girlVideo.videoHeight;
-    const b = girlBox();
-    ctx.drawImage(girlVideo, b.x, b.y, b.w, b.h);
-    return;
+    const cur = girlEls[girlCur];
+    if (cur && cur.readyState >= 2) {
+      if (girlNext >= 0) {
+        // розчинення: старий згасає, новий проявляється
+        const nx = girlEls[girlNext];
+        const cross = Math.max(0.05, G.crossSeconds ?? 0.5);
+        const t = Math.max(0, Math.min(1, nx.currentTime / cross));
+        drawClip(cur, 1 - t);
+        if (nx.readyState >= 2) drawClip(nx, t);
+      } else {
+        drawClip(cur, 1);
+      }
+      return;
+    }
   }
 
+  // запасний шлях: кадри зі спрайтшита
   if (!girlSheet) return;
   const cols = Math.max(1, G.cols);
   const rows = Math.ceil(G.frames / cols);
-  const fw = girlSheet.width / cols;      // розмір одного кадру в спрайтшиті
+  const fw = girlSheet.width / cols;
   const fh = girlSheet.height / rows;
-  girlAspect = fw / fh;
 
   const elapsed = Math.max(0, now - girlT0);
   const i = Math.floor(elapsed / 1000 * G.fps) % G.frames;
-  const b = girlBox();
+  const b = girlBox(null, fw / fh);
   ctx.drawImage(girlSheet, (i % cols) * fw, Math.floor(i / cols) * fh, fw, fh,
                 b.x, b.y, b.w, b.h);
+}
+
+function drawClip(v, alpha) {
+  if (alpha <= 0.004) return;
+  const b = girlBox(v._cfg, v.videoWidth / v.videoHeight);
+  if (alpha >= 0.999) { ctx.drawImage(v, b.x, b.y, b.w, b.h); return; }
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(v, b.x, b.y, b.w, b.h);
+  ctx.restore();
 }
 
 // Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
