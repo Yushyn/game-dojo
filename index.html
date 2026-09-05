@@ -531,20 +531,13 @@
 
   /* Шар інтерфейсу. Сам він кліків не ловить — тільки те, що
      всередині, інакше не можна було б мняти стопу. */
-  .hud {
-
-    position: absolute; inset: 0; pointer-events: none;
-
-    font-family: var(--display);
-
-    transition: opacity .3s ease;
-
-  }
-
-  /* Поки йде повноекранна заставка втрати життя, інтерфейс
-
-     ховається: вона має бути справді на весь екран. */
-
+  .hud {
+    position: absolute; inset: 0; pointer-events: none;
+    font-family: var(--display);
+    transition: opacity .3s ease;
+  }
+  /* Поки йде повноекранна заставка втрати життя, інтерфейс
+     ховається: вона має бути справді на весь екран. */
   body[data-phase="anim"] .hud { opacity: 0; pointer-events: none; }
   .hud > * { pointer-events: auto; }
   .hud-text { text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 10) rgba(0,0,0,.95); }
@@ -615,32 +608,12 @@
     position: absolute; left: calc(var(--u) * 1380); top: calc(var(--u) * 30);
     display: flex; align-items: flex-start; gap: calc(var(--u) * 14);
   }
-  /* Клітинка значка. Червоний шар лежить рівно на картинці,
-     тому обидва мусять бути одного розміру — звідси inline-block
-     і position: relative. */
-  .lives .life { position: relative; display: block; }
   .lives img {
     display: block; height: calc(var(--u) * 95); width: auto;
     filter: drop-shadow(0 calc(var(--u) * 3) calc(var(--u) * 10) rgba(0,0,0,.9));
-    transition: opacity var(--life-fade, .5s) ease;
+    transition: opacity .45s ease, transform .45s ease;
   }
-  /* Червоний шар. Сам по собі це просто червоний прямокутник —
-     видно з нього лише те, що не сховала маска, тобто рівно
-     силует ступні. Поки життя ціле, шар прозорий. */
-  .lives .life-tint {
-    position: absolute; inset: 0;
-    background: var(--life-red, #c02020);
-    opacity: 0;
-    transition: opacity var(--life-fade, .5s) ease;
-    -webkit-mask-position: center; mask-position: center;
-    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-    -webkit-mask-size: contain;     mask-size: contain;
-    pointer-events: none;
-  }
-  /* Життя втрачено: картинка притухає, червоний проступає.
-     Значок НЕ зникає — він лишається на екрані до кінця гри. */
-  .lives .life.lost img   { opacity: var(--life-dim, .45); }
-  .lives .life.lost .life-tint { opacity: var(--life-red-alpha, .9); }
+  .lives img.gone { opacity: 0; transform: scale(.6); }
 
   /* Повноекранний ролик при втраті життя. Картинку-заглушку малює
      саме полотно; сюди підставляється відео, коли воно зʼявиться. */
@@ -650,6 +623,16 @@
     background: #05040a;
   }
   .life-anim[hidden] { display: none; }
+  /* Перехід у ролик втрати життя і назад — через чорноту.
+     Тривалість задає --life-fade, її ставить src/main.js
+     із tuning.js, щоб число було в одному місці. */
+  .life-fade {
+    position: absolute; inset: 0; z-index: 40;
+    background: #000; opacity: 0; pointer-events: none;
+    transition: opacity var(--life-fade, .35s) ease;
+  }
+  .life-fade.on { opacity: 1; }
+
 
   /* Восьмикутна кнопка. Одна й та сама картинка для хрестика
      і для трьох кнопок пензля, різниця лише в розмірі. */
@@ -947,6 +930,9 @@
          Так вимикач Sound глушить його разом із музикою, а якщо
          браузер звук не пустить — ролик усе одно покажеться. -->
     <audio id="life-sound" preload="auto"></audio>
+    <!-- Затемнення на вхід і вихід із ролика. Лежить НАД відео:
+         спершу гасить сцену, потім із чорноти проявляє ролик. -->
+    <div class="life-fade" id="life-fade"></div>
 
     <!-- Питання перед виходом. Поки воно відкрите, таймер стоїть. -->
     <div class="ask" id="ask" hidden>
