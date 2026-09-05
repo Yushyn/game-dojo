@@ -101,7 +101,7 @@ export const TUNING = {
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
       name: 'Leather Ankle Boot', passPercent: 90 },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
-      name: 'Rubber Duck',        passPercent: 85 },
+      name: 'Rubber Duck',        passPercent: 95 },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
       name: 'Trojan Horse',       passPercent: 45 },
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
@@ -173,7 +173,7 @@ export const TUNING = {
     // Без цього нога наче не падає, а просто проявляється.
     dropShadow: {
       on:       true,
-      alpha:    0.55,  // наскільки темна тінь у мить приземлення
+      alpha:    0.2,  // наскільки темна тінь у мить приземлення
       width:    0.3,  // ширина відносно ширини стопи
       height:   0.055, // висота (тінь пласка, це еліпс)
       spread:   2.4,   // у скільки разів вона ширша, коли нога вгорі
