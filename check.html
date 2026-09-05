@@ -35,10 +35,14 @@ var FILES = [
   { path:'src/screens.js',  mark:'showScreen',       need:'перемикач екранів' },
   { path:'src/config.js',   mark:'1920',             need:'розмір 1920×1080' },
   { path:'src/tuning.js',   mark:'btnNewGame',       need:'блок screens' },
-  { path:'src/game.js',     mark:'LIQUIFY',          need:'рушій Liquify' },
+  { path:'src/game.js',     mark:'roundFrame',       need:'рушій гри' },
   { path:'src/main.js',     mark:'data-tool',        need:'кнопки інструментів' },
   { path:'src/db.js',       mark:'initDb',           need:'безпечне підключення бази' },
-  { path:'assets/foot.png', mark:null,               need:'картинка ноги' }
+  { path:'assets/foot.png',          mark:null, need:'картинка ноги' },
+  { path:'assets/background.png',    mark:null, need:'фон сцени' },
+  { path:'assets/boot1.png',         mark:null, need:'чобіт раунду 1' },
+  { path:'assets/boot1-outline.png', mark:null, need:'контур чобота 1' },
+  { path:'assets/boot2.png',         mark:null, need:'чобіт раунду 2' }
 ];
 
 var rows = [], problems = [];
@@ -100,6 +104,66 @@ function next() {
     });
 }
 
+// ── Перевірка лідерборду ──────────────────────────────────────
+// Найчастіші причини, чому він мовчить: у config.js зайвий символ
+// у адресі чи ключі, або в базі немає таблиці scores.
+function checkDatabase() {
+  var v = document.getElementById('verdict');
+  import('./src/config.js?t=' + Date.now()).then(function (cfg) {
+    var url = cfg.SUPABASE_URL || '', key = cfg.SUPABASE_PUBLISHABLE_KEY || '';
+    var notes = [];
+
+    var ref = url.replace('https://', '').split('.')[0];
+    if (ref.length !== 20) {
+      notes.push('Адреса підозріла: у назві проєкту ' + ref.length +
+                 ' символів, а має бути рівно 20. Схоже, зайвий або загублений символ.');
+    }
+    if (key.indexOf('sb_publishable_') !== 0) {
+      notes.push('Ключ має починатись на <b>sb_publishable_</b>, а починається на «' +
+                 key.slice(0, 16) + '». Схоже, зайвий символ на початку.');
+    }
+    if (key.indexOf('sb_secret') === 0) {
+      notes.push('<b>Це секретний ключ!</b> Його не можна класти у фронтенд. Потрібен publishable.');
+    }
+
+    return fetch(url + '/rest/v1/scores?select=player,score&limit=1',
+                 { headers: { apikey: key, Authorization: 'Bearer ' + key } })
+      .then(function (r) {
+        if (r.ok) {
+          v.className = 'good';
+          v.innerHTML = '<b>Усе гаразд.</b> Файли нові, модулі стикуються, ' +
+            'база відповідає і таблиця <b>scores</b> читається.<br>' +
+            'Відкривай index.html і онови сторінку через Ctrl+Shift+R.';
+          return;
+        }
+        return r.text().then(function (body) {
+          var why = r.status === 404
+            ? 'Адреса відповідає, але таблиці <b>scores</b> в ній немає. ' +
+              'Виконай schema.sql у SQL Editor цього проєкту Supabase.'
+            : (r.status === 401 || r.status === 403)
+            ? 'База відхилила ключ або заборонила читання. Перевір ключ і те, ' +
+              'що в schema.sql виконались RLS-політики.'
+            : 'База відповіла кодом ' + r.status + '.';
+          v.className = 'fail';
+          v.innerHTML = '<b>Файли в порядку, але лідерборд не працює.</b><br><br>' + why +
+            (notes.length ? '<br><br>' + notes.join('<br>') : '') +
+            '<pre>' + body.slice(0, 300) + '</pre>';
+        });
+      })
+      .catch(function (e) {
+        v.className = 'fail';
+        v.innerHTML = '<b>Файли в порядку, але до бази не достукатись.</b><br><br>' +
+          'Адреса не відповідає взагалі. Найімовірніше вона написана з помилкою, ' +
+          'або проєкт Supabase заснув — тоді натисни Resume в дашборді.' +
+          (notes.length ? '<br><br>' + notes.join('<br>') : '') +
+          '<pre>' + (e && e.message || e) + '</pre>';
+      });
+  }).catch(function (e) {
+    v.className = 'fail';
+    v.innerHTML = '<b>Не вдалося прочитати src/config.js</b><pre>' + (e && e.message || e) + '</pre>';
+  });
+}
+
 function finish() {
   var v = document.getElementById('verdict');
   if (problems.length) {
@@ -116,24 +180,29 @@ function finish() {
 
   Promise.all([
     import('./src/game.js' + stamp),
-    import('./src/db.js' + stamp)
+    import('./src/db.js' + stamp),
+    import('./src/screens.js' + stamp)
   ]).then(function (mods) {
-    var needGame = ['start','tool','setTool','setSize','setStrength','setHardness',
-                    'setGrid','undo','resetAll','exportPNG','setStrokeListener'];
-    var needDb   = ['topScores','submitScore','initDb'];
-    var lost = needGame.filter(function (n) { return !(n in mods[0]); })
-      .map(function (n) { return 'game.js: ' + n; })
-      .concat(needDb.filter(function (n) { return !(n in mods[1]); })
-      .map(function (n) { return 'db.js: ' + n; }));
+    // Те, що main.js справді імпортує з кожного файлу
+    var need = [
+      ['game.js',    ['start','tool','setTool','undo','action','reset','getState']],
+      ['db.js',      ['topScores','submitScore','initDb']],
+      ['screens.js', ['initScreens','showScreen','currentScreen']]
+    ];
+    var lost = [];
+    need.forEach(function (pair, i) {
+      pair[1].forEach(function (n) {
+        if (!(n in mods[i])) lost.push(pair[0] + ': ' + n);
+      });
+    });
 
     if (lost.length) {
       v.className = 'fail';
       v.innerHTML = '<b>Модулі не стикуються.</b> Бракує:<pre>' + lost.join('\n') + '</pre>';
       return;
     }
-    v.className = 'good';
-    v.innerHTML = '<b>Усе гаразд.</b> Файли нові, модулі стикуються.<br>' +
-      'Відкривай index.html і онови сторінку через Ctrl+Shift+R.';
+    v.innerHTML = 'Файли й модулі в порядку. Перевіряю базу…';
+    checkDatabase();
   }).catch(function (e) {
     v.className = 'fail';
     v.innerHTML = '<b>Код не завантажується.</b><pre>' + String(e && e.message || e) + '</pre>';

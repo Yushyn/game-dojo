@@ -2,6 +2,7 @@
 // сторінка все одно працює, просто в панелі буде напис про це.
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
+import { TUNING } from './tuning.js';
 
 const CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.1/+esm';
 const LOAD_TIMEOUT_MS = 6000;
@@ -11,7 +12,7 @@ export let dbReady = false;
 
 // Підключення винесене в окрему функцію і НЕ виконується саме собою.
 // Раніше воно стояло вгорі файлу — і якщо CDN недоступний (корпоративна
-// мережа, збій jsdelivr), падав увесь сайт, включно з картинкою.
+// мережа, збій jsdelivr), падав увесь сайт, включно з грою.
 // Тепер найгірше, що станеться, — не буде лідерборду.
 export async function initDb() {
   try {
@@ -23,6 +24,7 @@ export async function initDb() {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
     dbReady = true;
+    printResetHint();
   } catch (e) {
     console.warn('Лідерборд недоступний:', e?.message || e);
     dbReady = false;
@@ -30,14 +32,47 @@ export async function initDb() {
   return dbReady;
 }
 
-export async function topScores(limit = 10) {
+// ── Скидання лідерборду ───────────────────────────────────────
+// Стара межа з tuning.js у вигляді, зрозумілому базі.
+// Результати, старіші за неї, у список не потрапляють.
+function cutoff() {
+  const raw = String(TUNING.leaderboard?.resetBefore || '').trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) {
+    console.warn('Лідерборд: не зрозумів дату «' + raw +
+      '» у resetBefore. Потрібен формат РРРР-ММ-ДДТГГ:ХХ, наприклад 2026-09-05T14:30');
+    return null;
+  }
+  return d.toISOString();
+}
+
+// Підказка геймдизайнеру: готовий рядок із поточним часом
+function printResetHint() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const now = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+              `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const c = cutoff();
+  console.log(
+    'Лідерборд: ' + (c ? 'показує результати з ' + new Date(c).toLocaleString() : 'показує всі результати') +
+    '\nЩоб скинути його зараз, встав у tuning.js:  resetBefore: \'' + now + '\','
+  );
+}
+
+export async function topScores(limit) {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
+    let q = supabase
       .from('scores')
       .select('player, score, created_at')
       .order('score', { ascending: false })
-      .limit(limit);
+      .limit(limit || TUNING.leaderboard?.limit || 10);
+
+    const c = cutoff();
+    if (c) q = q.gte('created_at', c);
+
+    const { data, error } = await q;
     if (error) { console.error('Помилка лідерборду:', error.message); return []; }
     return data || [];
   } catch (e) {
