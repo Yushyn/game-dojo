@@ -212,6 +212,16 @@ const MUSIC_FALLBACK = {
   showMute:    true,
 };
 
+// Грім у меню. Він не окрема музика, а доріжка до відео: звук
+// довжиною 6.10 с проти 6.08 с відео, удар припадає на 4.2 с,
+// коли спалах уже почався. Тому його не крутять самостійно —
+// його веде відео, кадр у кадр.
+const THUNDER_FALLBACK = {
+  src:    ['assets/menu-thunder.mp3', 'assets/sound.mp3'],
+  volume: 0.7,
+  offset: 0,   // + зсуває звук пізніше за картинку, у секундах
+};
+
 const players = {};      // { menu: <audio>, game: <audio> }
 const fades   = {};      // таймери плавного наростання
 let muted = false;
@@ -234,12 +244,28 @@ function musicConf() {
   };
 }
 
+function thunderConf() {
+  const T = S.thunder || {};
+  return {
+    ...THUNDER_FALLBACK,
+    ...T,
+    src: [...new Set([].concat(T.src || [], THUNDER_FALLBACK.src))],
+  };
+}
+
 function prepMusic() {
   const M = musicConf();
   muted = localStorage.getItem(MUTE_KEY) === '1';
 
   hook('menu', $('s-music'), M.menu);
   hook('game', $('s-music-game'), M.game);
+  hook('thunder', $('s-thunder'), thunderConf().src);
+
+  // Гримить рівно стільки, скільки триває відео, і не зациклюється
+  // сам по собі — інакше за пару хвилин звук поїхав би від картинки.
+  const th = players.thunder;
+  if (th) { th.loop = false; th.volume = thunderConf().volume; }
+  bindThunder();
 
   const btn = $('s-mute');
   if (!btn) return;
@@ -297,8 +323,10 @@ function trackFor(name) {
 function updateMusic(name) {
   const want = muted ? null : trackFor(name);
   Object.keys(players).forEach((key) => {
+    if (key === 'thunder') return;      // ним керує відео, не екран
     if (key === want) fadeIn(key); else fadeOut(key);
   });
+  syncThunder();
 }
 
 function fadeIn(key) {
@@ -332,6 +360,49 @@ function fadeOut(key) {
     el.volume = Math.max(0, from * i / steps);
     if (i <= 0) { clearInterval(fades[key]); el.pause(); }
   }, 25);
+}
+
+// ── Грім під відео меню ───────────────────────────────────────
+// Звук веде відео, а не власний таймер: щоразу, коли ролик
+// починається спочатку, грім теж починається спочатку. Якщо вони
+// все ж розійшлись більше ніж на чверть секунди, звук підтягується
+// до кадру. Так спалах і удар лишаються разом хоч на п'ятому колі.
+let lastVideoT = 0;
+
+function bindThunder() {
+  const vid = $('s-menu-video');
+  if (!vid || !players.thunder) return;
+  vid.addEventListener('timeupdate', syncThunder);
+  vid.addEventListener('play', syncThunder);
+}
+
+function syncThunder() {
+  const th = players.thunder;
+  const vid = $('s-menu-video');
+  if (!th || !vid) return;
+
+  if (muted || current !== 'menu' || vid.paused) {
+    if (!th.paused) th.pause();
+    return;
+  }
+
+  const C = thunderConf();
+  const now = vid.currentTime;
+
+  // Відео пішло на нове коло — починаємо звук заново.
+  if (now < lastVideoT - 0.3) { th.currentTime = 0; }
+  lastVideoT = now;
+
+  const target = now - C.offset;
+  const len = th.duration || 0;
+
+  if (target < 0 || (len && target >= len)) {
+    if (!th.paused) th.pause();          // у цій частині ролика тиша
+    return;
+  }
+
+  if (Math.abs(th.currentTime - target) > 0.25) th.currentTime = target;
+  if (th.paused) { const p = th.play(); if (p && p.catch) p.catch(() => {}); }
 }
 
 // ── Кнопки ────────────────────────────────────────────────────
