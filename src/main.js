@@ -187,8 +187,15 @@ $('ask-yes')?.addEventListener('click', () => {
 
 // ══════════════════════════════════════════════════════════════
 //  ЖИТТЯ
-//  Значки праворуч від смужки часу. Скільки життів лишилось,
-//  стільки й видно; втрачені гаснуть зліва направо.
+//  Значки праворуч від смужки часу. Втрачене життя не зникає —
+//  його значок наливається червоним і таким лишається до кінця
+//  гри, як зарубка. Гасне справа наліво: перший втрачений — той,
+//  що стоїть трохи вище.
+//
+//  Червоне не «фільтр поверх картинки», а окремий шар: та сама
+//  картинка використана як трафарет (mask), і крізь неї
+//  проступає суцільний червоний. Тому червоніє рівно силует
+//  ступні, а не прямокутник навколо неї.
 // ══════════════════════════════════════════════════════════════
 
 const livesBox = $('lives');
@@ -200,16 +207,34 @@ function buildLives() {
   const count = Math.max(1, L.count ?? 2);
   const icons = L.icons || [];
 
+  livesBox.style.setProperty('--life-red', L.iconRed ?? '#c02020');
+  livesBox.style.setProperty('--life-red-alpha', L.iconRedAlpha ?? 0.9);
+  livesBox.style.setProperty('--life-dim', L.iconDim ?? 0.45);
+  livesBox.style.setProperty('--life-fade', (L.iconFadeSeconds ?? 0.5) + 's');
+
   livesBox.innerHTML = '';
   lifeIcons = [];
   for (let i = 0; i < count; i++) {
     const src = icons[i] || icons[icons.length - 1];
     if (!src) break;
+
+    const cell = document.createElement('span');
+    cell.className = 'life';
+
     const im = document.createElement('img');
     im.src = src;
     im.alt = '';
-    livesBox.appendChild(im);
-    lifeIcons.push(im);
+    cell.appendChild(im);
+
+    // Червоний шар: та сама картинка як трафарет.
+    const tint = document.createElement('i');
+    tint.className = 'life-tint';
+    tint.style.webkitMaskImage = 'url("' + src + '")';
+    tint.style.maskImage = 'url("' + src + '")';
+    cell.appendChild(tint);
+
+    livesBox.appendChild(cell);
+    lifeIcons.push(cell);
   }
 }
 buildLives();
@@ -295,12 +320,18 @@ const timerEl = $('hud-timer');
 let resultShown = false;
 let lostShown = false;
 
-function render(s) {
-  const st = s || getState();
-
-  // Поточний етап видно в розмітці: зручно і для стилів, і щоб
-  // подивитись у девтулзах, на чому саме гра зупинилась.
-  document.body.dataset.phase = st.phase;
+function render(s) {
+
+  const st = s || getState();
+
+
+
+  // Поточний етап видно в розмітці: зручно і для стилів, і щоб
+
+  // подивитись у девтулзах, на чому саме гра зупинилась.
+
+  document.body.dataset.phase = st.phase;
+
 
   put('hud-round', 'textContent',
       fill(t.hudRound, { name: st.bootName, n: st.round + 1, total: st.total || 1 }));
@@ -338,7 +369,8 @@ function render(s) {
   // Значки життів
   // Гаснуть СПРАВА наліво: перший втрачений — правий значок,
   // той, що стоїть трохи вище.
-  lifeIcons.forEach((im, i) => im.classList.toggle('gone', i >= st.lives));
+  // Втрачене життя не ховаємо, а позначаємо червоним.
+  lifeIcons.forEach((el, i) => el.classList.toggle('lost', i >= st.lives));
 
   // Другий запобіжник: ролик і його звук — лише на екрані гри.
   showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);

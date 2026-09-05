@@ -987,6 +987,9 @@ function frame(now) {
   if (game.phase === 'intro') drawIntro();
   if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
   if (game.phase === 'result') drawResult();
+  // Програш: чобіт не зникає разом із панеллю відсотка, а лишається
+  // на нозі, доки не почнеться повноекранна заставка.
+  if (game.phase === 'dying') drawBootHold();
   if (game.canEdit && pointerInside) drawBrush();
   if (game.phase === 'anim') drawLifeAnim();
 }
@@ -995,7 +998,10 @@ function frame(now) {
 // червоним — обидва числа в блоці `lives` у tuning.js.
 function drawFoot(offsetY) {
   const w = srcW * imgScale, h = srcH * imgScale;
-  const mix = deathMix();
+  // tintFoot: false — нога лишається звичайною, а втрату життя
+  // видно на значку вгорі. true повертає стару поведінку,
+  // коли блідла й червоніла сама нога.
+  const mix = (T.lives?.tintFoot === false) ? 0 : deathMix();
 
   if (mix <= 0.001) {
     ctx.drawImage(buf, imgX, imgY + offsetY, w, h);
@@ -1475,6 +1481,18 @@ function drawBootPreview() {
 }
 
 // Чобіт лягає поверх стопи: обидва вписані в один квадрат
+// Чобіт, який лишається на екрані після показу результату.
+// Це рівно той самий кадр, яким закінчився drawResult: справжній
+// чобіт на повній щільності, без розмиття й без панелі з
+// відсотком. Без цього чобіт зникав тієї ж миті, коли зникала
+// панель, і кілька секунд до заставки сцена стояла порожня.
+function drawBootHold() {
+  const boot = boots[game.round];
+  if (!boot || !boot.img) return;
+  const R = T.reveal || {};
+  drawBootOnFoot(boot.img, roundFrame, R.bootAlpha ?? 0.85, 0);
+}
+
 function drawResult() {
   const boot = boots[game.round];
   const R = T.reveal || {};
