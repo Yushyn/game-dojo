@@ -157,31 +157,65 @@
   }
 
   /* ══ ГОЛОВНЕ МЕНЮ ════════════════════════════════════════════ */
-  .logo-corner {
-    position: absolute; left: 5%; top: 8%;
-    font-size: clamp(20px, 2.6vw, 38px);
-    text-align: left;
+  /* Права колона меню: лого, під ним три кнопки. */
+  .menu-col {
+    position: absolute; right: 4.5%; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 3.2%;
   }
-  .menu {
-    position: absolute; right: 5.5%; bottom: 9%;
-    display: grid; gap: 6px; justify-items: end;
+  .brand { display: block; }
+  .brand img {
+    display: block;
+    width: clamp(240px, 34vh, 460px);
+    height: auto;
+    filter: drop-shadow(0 6px 28px rgba(0,0,0,.85));
   }
+  .menu { display: grid; gap: 1.6vh; justify-items: center; }
+
+  /* Кнопка — картинка художника, розтягнута по правилу 88|100|88:
+     бокові краї лишаються як намальовані, тягнеться лише середина.
+     Тому напис будь-якої довжини не ламає рамку. */
   .menu-item {
     all: unset;
     cursor: pointer;
-    font-family: var(--prose);
-    font-size: clamp(19px, 2.3vw, 34px);
+    --h: clamp(48px, 9vh, 96px);
+    box-sizing: border-box;
+    height: var(--h);
+    width: calc(var(--h) * 3.1);
+    display: flex; align-items: center; justify-content: center;
+    border-style: solid;
+    border-width: 0 calc(var(--h) * .7928);   /* 88 / 111 від висоти */
+    border-image-source: url('assets/btn-default.png');
+    border-image-slice: 0 88 fill;
+    border-image-repeat: stretch;
+
+    font-family: var(--display);
+    font-size: calc(var(--h) * .26);
     letter-spacing: .05em;
-    color: var(--bone);
-    padding: 4px 2px;
-    border-bottom: 1px solid transparent;
-    text-shadow: 0 2px 16px rgba(0,0,0,.95);
-    transition: color .25s, border-color .25s;
+    color: #e9dfcd;
+    text-shadow: 0 2px 6px rgba(0,0,0,.9);
+    white-space: nowrap;
+    transition: color .15s;
   }
   .menu-item:hover, .menu-item:focus-visible {
-    color: var(--candle-lit);
-    border-bottom-color: var(--candle);
+    border-image-source: url('assets/btn-hover.png');
+    color: #fff;
   }
+  .menu-item:active {
+    border-image-source: url('assets/btn-pressed.png');
+    color: #cfc3b2;
+  }
+
+  /* Вимикач музики — навмисно тихий, щоб не сперечався з кнопками */
+  .mute {
+    all: unset; cursor: pointer;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    color: rgba(236,227,212,.45);
+    padding: 6px 4px;
+    transition: color .2s;
+  }
+  .mute:hover, .mute:focus-visible { color: var(--candle-lit); }
 
   /* ══ СТОРІНКИ (лідерборд, автори) ════════════════════════════ */
   .page {
@@ -362,14 +396,23 @@
     <!-- Тло меню. Файл підставляє src/screens.js, поки відео не
          почалося — видно кадр-заставку, той самий кадр. -->
     <video class="bg-video" id="s-menu-video" muted loop playsinline preload="auto"></video>
-    <h1 class="logo logo-corner" id="s-menu-title">Game Dojo 2026</h1>
-    <nav class="menu">
-      <button class="menu-item" data-go="game"        id="s-go-game">Нова гра</button>
-      <button class="menu-item" data-go="leaderboard" id="s-go-board">Лідерборд</button>
-      <button class="menu-item" data-go="credits"     id="s-go-credits">Автори</button>
-    </nav>
+    <div class="menu-col">
+      <picture class="brand">
+        <source srcset="assets/logo.webp" type="image/webp">
+        <img id="s-logo" src="assets/logo.png" alt="Cinderhella — Fit or Die">
+      </picture>
+      <nav class="menu">
+        <button class="menu-item" data-go="game"        id="s-go-game">New game</button>
+        <button class="menu-item" data-go="leaderboard" id="s-go-board">Leaderboard</button>
+        <button class="menu-item" data-go="credits"     id="s-go-credits">Credits</button>
+      </nav>
+      <button class="mute" id="s-mute" aria-label="Звук">Звук: увімкнено</button>
+    </div>
   </div>
 </section>
+
+<!-- Музика меню. Джерело підставляє src/screens.js. -->
+<audio id="s-music" loop preload="auto"></audio>
 
 <!-- ══ 4. ЛІДЕРБОРД ═════════════════════════════════════════════ -->
 <section class="screen screen-page" data-screen="leaderboard">

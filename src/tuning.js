@@ -256,10 +256,26 @@ export const TUNING = {
       play:    true,   // false — лишиться нерухома заставка
     },
 
-    btnNewGame:     'Нова гра',
-    btnLeaderboard: 'Лідерборд',
-    btnCredits:     'Автори',
+    // Музика меню. Грає, поки відкриті меню, лідерборд і автори;
+    // у грі замовкає. Почати звучати вона може лише після кліку
+    // на PRESS TO START — це вимога браузера, не наша примха.
+    music: {
+      src:        'assets/menu-music.mp3',
+      volume:     0.5,   // 0..1
+      fadeSeconds: 1.5,  // за скільки плавно набирає гучність
+      showMute:   true,  // false — прибрати вимикач із меню
+    },
+
+    btnNewGame:     'New game',
+    btnLeaderboard: 'Leaderboard',
+    btnCredits:     'Credits',
     btnBack:        'Назад',
+
+    // Логотип у меню. Два файли — легкий webp і png про запас.
+    logo: { webp: 'assets/logo.webp', png: 'assets/logo.png' },
+
+    muteOn:  'Звук: увімкнено',
+    muteOff: 'Звук: вимкнено',
 
     leaderboardTitle: 'Лідерборд',
     creditsTitle:     'Автори',

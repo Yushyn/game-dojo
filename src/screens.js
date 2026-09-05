@@ -37,6 +37,7 @@ export function showScreen(name) {
 
   current = name;
   toggleVideo(name);
+  if (isQuietScreen(name)) playMusic(); else stopMusic();
   hooks.onShow?.(name);
 
   // Завантаження запускається рівно один раз, при першому заході.
@@ -58,6 +59,8 @@ export function initScreens(callbacks) {
   fillTexts();
   paintArt();
   buildFeet();
+  prepMusic();
+  preloadButtons();
   bindButtons();
 
   showScreen('press');
@@ -68,7 +71,6 @@ function fillTexts() {
   const set = (id, value) => { const el = $(id); if (el && value !== undefined) el.textContent = value; };
 
   set('s-press',         S.btnPressStart);
-  set('s-menu-title',    TUNING.texts.title);
   set('s-load-note',     S.loadingText);
   set('s-go-game',       S.btnNewGame);
   set('s-go-board',      S.btnLeaderboard);
@@ -178,6 +180,83 @@ function toggleVideo(name) {
   } else {
     vid.pause();
   }
+}
+
+// ── Наведення й натиск ────────────────────────────────────────
+// Картинки станів кнопки браузер завантажує лише коли вони вперше
+// знадобляться — тобто перше наведення блимало б порожнечею.
+// Тому просимо його взяти їх заздалегідь.
+function preloadButtons() {
+  ['assets/btn-hover.png', 'assets/btn-pressed.png'].forEach((src) => {
+    const im = new Image();
+    im.src = src;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  МУЗИКА МЕНЮ
+// ══════════════════════════════════════════════════════════════
+
+let music = null, fadeTimer = 0, muted = false;
+const MUTE_KEY = 'music-muted';
+
+function prepMusic() {
+  const M = S.music || {};
+  const el = $('s-music');
+  const btn = $('s-mute');
+
+  if (!el || !M.src) { btn?.remove(); return; }
+
+  music = el;
+  music.src = M.src;
+  music.volume = 0;
+  muted = localStorage.getItem(MUTE_KEY) === '1';
+
+  if (!btn || M.showMute === false) { btn?.remove(); return; }
+
+  paintMute(btn);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();          // щоб клік не пішов далі по меню
+    muted = !muted;
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+    paintMute(btn);
+    if (muted) stopMusic(); else if (isQuietScreen(current)) playMusic();
+  });
+}
+
+function paintMute(btn) {
+  btn.textContent = muted ? S.muteOff : S.muteOn;
+}
+
+// Екрани, де музика доречна: усе, крім самої гри й перших двох.
+function isQuietScreen(name) {
+  return name === 'menu' || name === 'leaderboard' || name === 'credits';
+}
+
+function playMusic() {
+  const M = S.music || {};
+  if (!music || muted) return;
+
+  const p = music.play();
+  if (p && p.catch) p.catch(() => {});   // браузер може відмовити — не біда
+
+  // плавно набираємо гучність, щоб не бити по вухах
+  clearInterval(fadeTimer);
+  const target = M.volume ?? 0.5;
+  const steps = Math.max(1, Math.round((M.fadeSeconds ?? 1.5) * 20));
+  let i = 0;
+  fadeTimer = setInterval(() => {
+    i++;
+    music.volume = Math.min(target, target * i / steps);
+    if (i >= steps) clearInterval(fadeTimer);
+  }, 50);
+}
+
+function stopMusic() {
+  if (!music) return;
+  clearInterval(fadeTimer);
+  music.pause();
+  music.volume = 0;
 }
 
 // ── Кнопки ────────────────────────────────────────────────────
