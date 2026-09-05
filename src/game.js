@@ -197,9 +197,20 @@ export function start(canvasEl, callbacks) {
         const waiting = [b];
         seen.set(b.outlineSrc, waiting);
         loadImage(b.outlineSrc)
-          .then((im) => {
+            .then((im) => {
             const box = bboxOfImage(im);
-            waiting.forEach((x) => { x.outline = im; x.outlineBBox = box; });
+            const fitBoxes = new Map();
+            waiting.forEach((x) => {
+              x.outline = im;
+              x.outlineBBox = box;
+              // Робоча частина контуру — своя в кожного чобота:
+              // один файл можуть ділити кілька з різними fitBox.
+              if (x.fit) {
+                const key = JSON.stringify(x.fit);
+                if (!fitBoxes.has(key)) fitBoxes.set(key, bboxOfImage(im, x.fit));
+                x.outlineFitBBox = fitBoxes.get(key);
+              }
+            });
           })
           .catch((e) => console.warn('Контур не завантажився:', e.message));
       });
@@ -297,8 +308,14 @@ function prepBoot(def, img) {
   tmp.width = w; tmp.height = h;
   const tc = tmp.getContext('2d', { willReadFrequently: true });
   tc.drawImage(img, 0, 0, w, h);
+  const fit = def.fitBox || null;
+  // Маска — по ПОВНОМУ силуету: саме його гравець бачить, саме за
+  // ним тягне ногу і саме він іде у відсоток. fitBox її не чіпає.
   const mask = maskFrom(tc.getImageData(0, 0, w, h).data, w, h);
   const bb = bboxOf(mask, w, h);
+  // ...а от МІСЦЕ І РОЗМІР рахуються по робочій частині: без неї
+  // гра підганяла б під стопу картинку разом із крилом чи шиєю.
+  const fbb = fit ? bboxOf(trimMask(mask, w, h, fit), w, h) : null;
   const back = img.width / w; // з координат маски назад у пікселі картинки
 
   return {
@@ -307,6 +324,7 @@ function prepBoot(def, img) {
     // Верхня межа площі. Якщо в чобота свого числа немає,
     // береться загальне з блоку compare.
     cutOffset: typeof def.cutOffset === 'number' ? def.cutOffset : null,
+    fit,
     pass: typeof def.passPercent === 'number' ? def.passPercent : T.round.passPercent,
     img,
     shape: makeSilhouette(img, T.colors.overlay),   // для накладання на стопу
@@ -316,6 +334,10 @@ function prepBoot(def, img) {
     offsetY: typeof def.offsetY === 'number' ? def.offsetY : 0,
     bbox: bb && { cx: bb.cx * back, cy: bb.cy * back,
                   w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back },
+    fitBBox: fbb && { cx: fbb.cx * back, cy: fbb.cy * back,
+                      w: fbb.w * back, h: fbb.h * back, bottom: (fbb.y1 + 1) * back },
+    // Своя робоча зона замість спільної, якщо задана
+    area: def.area || null,
   };
 }
 
@@ -334,10 +356,34 @@ function makeSilhouette(img, color) {
 
 // Стопа має стояти підошвою на пʼєдесталі, тож рахуємо все від
 // рамки самої стопи, ігноруючи прозорі поля навколо неї.
+// Пропорції ПЕРШОЇ ноги. Потрібні, щоб решта ніг вийшли такої
+// самої ДОВЖИНИ, а не такої самої висоти — див. layout() нижче.
+let footRefAspect = 0;
+
 function layout() {
   const I = T.image;
   const bb = baseBB || { h: srcH, cx: srcW / 2, y1: srcH - 1 };
-  imgScale = (GAME.height * I.heightPercent) / bb.h;
+
+  // heightPercent задає розмір ПЕРШОЇ ноги, як і раніше.
+  if (!footRefAspect) footRefAspect = bb.w / bb.h;
+
+  if (I.sameLength === false) {
+    // Стара поведінка: кожну ногу тягнемо до однакової ВИСОТИ.
+    imgScale = (GAME.height * I.heightPercent) / bb.h;
+  } else {
+    // Ноги намальовані з різною кількістю гомілки: у другої її
+    // більше. Якщо рівняти по висоті, то при однаковій висоті
+    // кадру сама стопа виходить різної довжини — заміряно 714 і
+    // 841 піксель, тобто друга на 18% довша. А саме по довжині
+    // стопи гра підганяє чоботи, тож на другому житті все ставало
+    // помітно більшим.
+    //
+    // Тому рівняємо по ДОВЖИНІ: цільову довжину беремо з першої
+    // ноги, і для неї формула збігається зі старою.
+    const targetW = GAME.height * I.heightPercent * footRefAspect;
+    imgScale = targetW / bb.w;
+  }
+
   imgX = Math.round(GAME.width * I.standX - bb.cx * imgScale);
   imgY = Math.round(GAME.height * I.standY - (bb.y1 + 1) * imgScale);
 }
@@ -356,6 +402,37 @@ function maskFrom(data, W, H) {
     m[i] = 1;
   }
   return m;
+}
+
+// ── РОБОЧА ЧАСТИНА КАРТИНКИ ───────────────────────────────────
+// У деяких чобіт є декор, який до стопи не має стосунку: крило,
+// шия фламінго. Якщо міряти чобіт разом із ним, гра підганяє під
+// стопу ВСЮ картинку — і сам черевик стає крихітним та з'їжджає
+// вбік, а нога намагається залізти в його халяву.
+//
+// `fitBox` каже, яка частина картинки і є власне взуттям. Усе поза
+// нею з розрахунків викидається: і посадка, і лінія відрізу, і
+// підрахунок відсотка. Малюється чобіт при цьому цілком, з декором.
+function fitRect(fit, W, H) {
+  const f = fit || {};
+  const l = Math.max(0, Math.min(1, f.left   ?? 0));
+  const r = Math.max(0, Math.min(1, f.right  ?? 1));
+  const t = Math.max(0, Math.min(1, f.top    ?? 0));
+  const b = Math.max(0, Math.min(1, f.bottom ?? 1));
+  return { x0: Math.floor(l * W), x1: Math.ceil(r * W),
+           y0: Math.floor(t * H), y1: Math.ceil(b * H) };
+}
+
+// Обнуляє все, що поза рамкою. Повертає ту саму маску, якщо рамки немає.
+function trimMask(mask, W, H, fit) {
+  if (!fit) return mask;
+  const R = fitRect(fit, W, H);
+  const out = new Uint8Array(mask.length);
+  for (let y = R.y0; y < R.y1 && y < H; y++) {
+    const row = y * W;
+    for (let x = R.x0; x < R.x1 && x < W; x++) out[row + x] = mask[row + x];
+  }
+  return out;
 }
 
 function bboxOf(mask, W, H) {
@@ -379,7 +456,7 @@ function bboxOf(mask, W, H) {
 // стопа ще не зім'ята, і далі не чіпаємо: інакше чобіт їздив би
 // за стопою, і гравцеві не було б до чого підлаштовуватись.
 // Рамка картинки в пікселях самої картинки
-function bboxOfImage(img) {
+function bboxOfImage(img, fit) {
   const maxSide = 420;
   const k = Math.min(1, maxSide / Math.max(img.width, img.height));
   const w = Math.max(2, Math.round(img.width * k));
@@ -388,32 +465,40 @@ function bboxOfImage(img) {
   tmp.width = w; tmp.height = h;
   const tc = tmp.getContext('2d', { willReadFrequently: true });
   tc.drawImage(img, 0, 0, w, h);
-  const bb = bboxOf(maskFrom(tc.getImageData(0, 0, w, h).data, w, h), w, h);
+  const bb = bboxOf(trimMask(maskFrom(tc.getImageData(0, 0, w, h).data, w, h), w, h, fit), w, h);
   if (!bb) return null;
   const back = img.width / w;
   return { cx: bb.cx * back, cy: bb.cy * back,
            w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back };
 }
 
-function frameFor(boot, bbox, forceShrink) {
+// bbox    — повний силует: його малюють і за ним рахують відсоток
+// fitBBox — робоча частина: за нею рахують РОЗМІР І МІСЦЕ.
+// Якщо fitBox не заданий, це одне й те саме.
+function frameFor(boot, bbox, forceShrink, fitBBox) {
   const bb = bbox || boot.bbox;
+  const fb = fitBBox || boot.fitBBox || bb;
   if (!footBB || !bb) return null;
 
   // Прикладаємо по ДОВЖИНІ стопи, а підошву чобота ставимо на ту саму
   // землю, що й підошву стопи. Раніше рівняли по більшій стороні — і чобіт
   // роздувався на всю ногу, бо стопа з гомілкою висока, а чобіт широкий.
-  let k = (footBB.w / bb.w) * boot.scale;
+  let k = (footBB.w / fb.w) * boot.scale;
 
   // ...і додатково вганяємо у дозволену рамку, щоб високі чоботи
-  // не залазили на смужку часу, а довгі — на дівчинку.
-  const shrink = forceShrink !== undefined ? forceShrink : shrinkToArea(bb, k);
+  // не залазили на смужку часу, а довгі — на дівчинку. Рамку
+  // міряємо по ПОВНОМУ силуету: вилізти за екран не має нічого,
+  // включно з крилом чи шиєю.
+  const shrink = forceShrink !== undefined ? forceShrink : shrinkToArea(bb, k, boot);
   k *= shrink;
 
+  // Вирівнюємо теж по робочій частині: підошва черевика на землю,
+  // центр черевика — над центром стопи. Декор просто їде за ними.
   return {
     k,
     shrink,
-    dx: footBB.cx - bb.cx * k + boot.offsetX * footBB.w,
-    dy: (footBB.y1 + 1) - bb.bottom * k + boot.offsetY * footBB.h,
+    dx: footBB.cx - fb.cx * k + boot.offsetX * footBB.w,
+    dy: (footBB.y1 + 1) - fb.bottom * k + boot.offsetY * footBB.h,
   };
 }
 
@@ -421,8 +506,11 @@ function frameFor(boot, bbox, forceShrink) {
 // Рахуємо точно по краях: чобіт стоїть підошвою на землі стопи й
 // вирівняний по її центру, тож де опиниться кожен його край, відомо
 // наперед. 1 означає «і так влазить».
-function shrinkToArea(bb, k) {
-  const A = T.bootArea;
+function shrinkToArea(bb, k, boot) {
+  const base = T.bootArea || {};
+  // Чобіт може мати власну зону: {top, left, right}. Не вказані
+  // числа беруться зі спільної.
+  const A = boot && boot.area ? { ...base, ...boot.area } : base;
   if (!A || A.on === false || !footBB || !imgScale) return 1;
 
   // Межі рамки в координатах буфера стопи
@@ -718,7 +806,8 @@ function beginRound(i) {
   // окремо, його рамка на пару пікселів інша — і контур ліг би трохи
   // мимо чобота.
   roundOutline = boot.outlineBBox
-    ? frameFor(boot, boot.outlineBBox, roundFrame ? roundFrame.shrink : undefined)
+    ? frameFor(boot, boot.outlineBBox, roundFrame ? roundFrame.shrink : undefined,
+               boot.outlineFitBBox)
     : roundFrame;
   roundCutY = cutLineFor(boot, roundFrame);
   roundTarget = bootGrid(boot, roundFrame);

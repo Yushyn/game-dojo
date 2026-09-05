@@ -463,69 +463,17 @@ function hook(key, el, src) {
   tryNext();
 }
 
-// Зупинка лупу відкладена: спершу він стихає, і аж потім
-// глушиться. Тому при поверненні в гру ЦЮ ВІДКЛАДЕНУ ЗУПИНКУ
-// обовʼязково треба скасувати. Без цього виходило так: вийшла
-// в меню й одразу повернулась — стара команда спрацьовувала вже
-// у грі й вимикала музику до кінця сесії.
-let loopStopTimer = 0;
-
-function gameMusicOn() {
-  const M = musicConf();
-  clearTimeout(loopStopTimer);
-  loopStopTimer = 0;
-
-  // Браузер міг приспати звуковий канал — будимо.
-  if (audio && audio.state === 'suspended') audio.resume().catch(() => {});
-
-  if (loopReady() && loopPlay()) { loopVolume(M.volume ?? 0.5, M.fadeSeconds ?? 1.5); return; }
-  fadeIn('game');
-}
-
-function gameMusicOff() {
-  clearTimeout(loopStopTimer);
-  if (loopReady()) {
-    loopVolume(0, 0.35);
-    loopStopTimer = setTimeout(() => { loopStop(); loopStopTimer = 0; }, 400);
-    return;
-  }
-  fadeOut('game');
-}
-
 // Притишити музику гри, поки на екрані ролик втрати життя.
 // Без цього зациклений трек рівня просто перекрикує «ой»:
 // у ролику перші пʼять секунд — тиха атмосфера, і лише в кінці
 // удар. На тлі музики його майже не чути.
-// Ролик втрати життя НЕ обриває музику гри — вона лише стихає,
-// а «ой» звучить на її тлі. Обривати було б грубо: після ролика
-// трек починався б з іншого місця, і склейка чулася б.
 export function duckMusic(on) {
-  if (muted) return;
-  const M = musicConf();
-  const full = M.volume ?? 0.5;
-  const quiet = full * (M.duckVolume ?? 0.25);
-
-  if (loopReady()) {
-    loopVolume(on ? quiet : full, on ? 0.35 : 0.8);
-    return;
+  if (!players.game) return;
+  if (on) {
+    fadeOut('game');
+  } else if (current === 'game' && !muted) {
+    fadeIn('game');            // повертаємо з того ж місця, плавно
   }
-  const el = players.game;
-  if (!el) return;
-  clearInterval(fades.game);
-  rampAudio(el, on ? quiet : full, on ? 0.35 : 0.8);
-}
-
-// Плавна зміна гучності для звичайного <audio>
-function rampAudio(el, target, secs) {
-  const steps = Math.max(1, Math.round(secs * 20));
-  const from = el.volume;
-  let i = 0;
-  clearInterval(fades.ramp);
-  fades.ramp = setInterval(() => {
-    i++;
-    el.volume = Math.max(0, Math.min(1, from + (target - from) * i / steps));
-    if (i >= steps) clearInterval(fades.ramp);
-  }, 50);
 }
 
 // Чи вимкнений звук. Потрібно main.js: ролик втрати життя має
@@ -549,13 +497,10 @@ function trackFor(name) {
 
 function updateMusic(name) {
   const want = muted ? null : trackFor(name);
-
-  if (want === 'menu') fadeIn('menu'); else fadeOut('menu');
-
-  // Музику гри веде безшовний луп, а звичайний програвач лишається
-  // запасним — на випадок, якщо Web Audio недоступне.
-  if (want === 'game') gameMusicOn(); else gameMusicOff();
-
+  Object.keys(players).forEach((key) => {
+    if (key === 'thunder') return;      // ним керує відео, не екран
+    if (key === want) fadeIn(key); else fadeOut(key);
+  });
   syncThunder();
 }
 
@@ -591,103 +536,6 @@ function fadeOut(key) {
     if (i <= 0) { clearInterval(fades[key]); el.pause(); }
   }, 25);
 }
-
-// ══════════════════════════════════════════════════════════════
-//  БЕЗДОГАННИЙ ЛУП МУЗИКИ ГРИ
-//
-//  Звичайний <audio loop> клацає на стику. Дві причини:
-//  у самому mp3 є 42 мс тиші (37 на початку, 5 у кінці — це
-//  службові кадри кодувальника), і браузер додає свою затримку
-//  на перезапуск.
-//
-//  Тому музику гри крутимо через Web Audio: один раз
-//  розшифровуємо файл у памʼять, обрізаємо тишу по краях і
-//  зациклюємо вже готові семпли. Шва не лишається взагалі.
-//
-//  Якщо щось піде не так — залишається звичайний <audio>,
-//  як раніше. Гірше звучатиме, але гратиме.
-// ══════════════════════════════════════════════════════════════
-
-let loopBuf = null, loopGain = null, loopNode = null, loopOn = false;
-
-async function loadGameLoop() {
-  const M = musicConf();
-  const list = [].concat(M.game || []);
-  if (!audio || !list.length) return;
-
-  for (const url of list) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const raw = await res.arrayBuffer();
-      const buf = await audio.decodeAudioData(raw);
-      loopBuf = trimEdges(buf);
-      loopGain = audio.createGain();
-      loopGain.gain.value = 0;
-      loopGain.connect(audio.destination);
-      return;
-    } catch (e) {
-      console.warn('Луп музики гри не зібрався з ' + url + ': ' + e.message);
-    }
-  }
-}
-
-// Зрізаємо тишу з обох країв — саме вона й чується як пауза.
-function trimEdges(buf) {
-  const eps = 0.002;
-  let first = buf.length, last = 0;
-
-  for (let c = 0; c < buf.numberOfChannels; c++) {
-    const d = buf.getChannelData(c);
-    let i = 0;
-    while (i < d.length && Math.abs(d[i]) < eps) i++;
-    if (i < first) first = i;
-    let j = d.length - 1;
-    while (j > 0 && Math.abs(d[j]) < eps) j--;
-    if (j > last) last = j;
-  }
-  if (first >= last) return buf;               // тиші немає, лишаємо як є
-
-  const len = last - first + 1;
-  const out = audio.createBuffer(buf.numberOfChannels, len, buf.sampleRate);
-  for (let c = 0; c < buf.numberOfChannels; c++) {
-    out.getChannelData(c).set(buf.getChannelData(c).subarray(first, last + 1));
-  }
-  return out;
-}
-
-function loopPlay() {
-  if (!loopBuf) return false;
-  if (loopOn) return true;
-  try {
-    loopNode = audio.createBufferSource();
-    loopNode.buffer = loopBuf;
-    loopNode.loop = true;                      // ось тут і немає шва
-    loopNode.connect(loopGain);
-    loopNode.start(0);
-    loopOn = true;
-    return true;
-  } catch (e) { return false; }
-}
-
-function loopStop() {
-  if (!loopNode) return;
-  try { loopNode.stop(); } catch (e) {}
-  try { loopNode.disconnect(); } catch (e) {}
-  loopNode = null; loopOn = false;
-}
-
-// Гучність міняємо плавно, за секунди.
-function loopVolume(v, secs) {
-  if (!loopGain || !audio) return;
-  const t = audio.currentTime;
-  const g = loopGain.gain;
-  g.cancelScheduledValues(t);
-  g.setValueAtTime(g.value, t);
-  g.linearRampToValueAtTime(Math.max(0, v), t + Math.max(0.01, secs || 0.3));
-}
-
-const loopReady = () => !!loopBuf;
 
 // ── Грім під відео меню ───────────────────────────────────────
 // Звук веде відео, а не власний таймер: щоразу, коли ролик
@@ -755,7 +603,7 @@ function bindButtons() {
 function go(name) {
   // Перший клік по сторінці — єдина мить, коли браузер дозволяє
   // і увімкнути звук, і розгорнутись на весь екран. Не проґав її.
-  if (current === 'press') { unlockAudio(); loadGameLoop(); }
+  if (current === 'press') unlockAudio();
 
   // Просимо повний екран не лише на першому кліку. Браузер міг
   // відмовити з десятка причин; кожен наступний дотик — нова

@@ -173,42 +173,74 @@ export const TUNING = {
   //   scale   — 1 це «як є», 1.1 більший, 0.9 менший
   //   offsetX — зсув убік, у частках довжини стопи (+ вправо)
   //   offsetY — зсув вгору-вниз, у частках висоти стопи (+ вниз)
+  //   fitBox  — яка ЧАСТИНА картинки є власне взуттям. Потрібен
+  //             лише тим чоботам, у яких збоку є декор: крило,
+  //             шия фламінго. Без нього гра підганяє під стопу всю
+  //             картинку разом із декором — черевик виходить
+  //             крихітним і з'їжджає вбік, а нога лізе в халяву.
+  //             Числа — частки картинки: { left, right, top, bottom },
+  //             за замовчуванням 0 / 1 / 0 / 1. Досить вказати ті,
+  //             що відрізняються.
+  //             Декор нікуди не дівається — його видно, він просто
+  //             не бере участі в розрахунках.
   //   outline — картинка контуру для другого кроку вступу.
   //             Якщо не вказати, гра намалює силует із самого чобота.
   //   name    — НАЗВА, яку гравець бачить угорі ліворуч замість номера
   //             раунду. Пиши англійською, як і решта написів.
   boots: [
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
-      name: 'Leather Ankle Boot', passPercent: 78 },
+      name: 'Leather Ankle Boot', passPercent: 78, cutOffset: 0 },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
       name: 'Rubber Duck',        passPercent: 73, cutOffset: 0.12 },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
-      name: 'Trojan Horse',       passPercent: 35, cutOffset: 0.10 },
+      name: 'Trojan Horse',       passPercent: 43, cutOffset: 0.10,
+      // Зсунутий трохи вліво. Число — частка довжини стопи:
+      // -0.08 це приблизно 8% ліворуч, + посунуло б праворуч.
+      offsetX: -0.08 },
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
-      name: 'Trail Sneaker',      passPercent: 79 },
+      name: 'Trail Sneaker',      passPercent: 79, cutOffset: 0 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
       name: 'Nightshade Heel',    passPercent: 64, cutOffset: 0.17 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
-      name: 'Jester Slipper',     passPercent: 79 },
+      name: 'Jester Slipper',     passPercent: 79, cutOffset: 0 },
 
     // ── Нові чоботи ──────────────────────────────────────────
     // Назви можна міняти прямо тут — гравець бачить саме їх
     // угорі ліворуч замість номера раунду.
+    // fitBox — де на картинці власне черевик, а де декор.
+    // У крилатого це права частина (ліворуч крило), у фламінго —
+    // усе, крім шиї з головою у правому верхньому куті.
     { src: 'assets/boot7.png', outline: 'assets/boot7-outline.png',
-      name: 'Winged Boot',        passPercent: 45 },
+      name: 'Winged Boot',        passPercent: 55, cutOffset: 0,
+      fitBox: { left: 0.44, top: 0.03 },
+      // Крило високе, і спільна рамка тиснула чобіт до 60%.
+      // Своя зона піднімає стелю майже під смужку часу.
+      area: { top: 0.11 } },
     { src: 'assets/boot8.png', outline: 'assets/boot8-outline.png',
-      name: 'Flamingo Royale',    passPercent: 49 },
+      name: 'Flamingo Royale',    passPercent: 43, cutOffset: 0,
+      fitBox: { right: 0.86, top: 0.27 },
+      // Шия з короною тепер не бере участі в підгонці, тому за
+      // повного розміру корона перекривала смужку часу. 0.86 —
+      // рівно стільки, щоб вона проходила під нею. Постав 1, якщо
+      // краще крупний чобіт, а перекриття не заважає.
+      scale: 0.86 },
     { src: 'assets/boot9.png', outline: 'assets/boot9-outline.png',
-      name: 'Melting Pump',       passPercent: 68 },
+      name: 'Melting Pump',       passPercent: 68, cutOffset: 0 },
     // УВАГА: шкарпетка — це фактично форма самої стопи, тому
     // недоторкана нога вже дає 97.5% збігу. Раунд «на не зіпсуй»:
     // поріг 98 означає, що виграє той, хто майже нічого не чіпав.
     // Якщо хочеться звичайного раунду — цей чобіт краще прибрати
     // або поставити поріг 99, але 100 недосяжно.
     { src: 'assets/boot10.png', outline: 'assets/boot10-outline.png',
-      name: 'Ducky Sock',         passPercent: 98 },
+      name: 'Ducky Sock',         passPercent: 98, cutOffset: 0 },
     { src: 'assets/boot11.png', outline: 'assets/boot11-outline.png',
-      name: 'Crimson Lace',       passPercent: 32 },
+      name: 'Crimson Lace',       passPercent: 32, cutOffset: 0 },
+    { src: 'assets/boot12.png', outline: 'assets/boot12-outline.png',
+      name: 'Thornroot Boot',     passPercent: 66, cutOffset: 0 },
+    { src: 'assets/boot13.png', outline: 'assets/boot13-outline.png',
+      name: 'Clown Stomper',      passPercent: 81, cutOffset: 0 },
+    { src: 'assets/boot14.png', outline: 'assets/boot14-outline.png',
+      name: 'Glass Slipper',      passPercent: 68, cutOffset: 0 },
   ],
 
   // ── ДЕ МОЖЕ СТОЯТИ ЧОБІТ ─────────────────────────────────────
@@ -223,6 +255,10 @@ export const TUNING = {
   // пʼєдестала й не з'їжджає вбік.
   //
   // Числа — частки екрана: 0 це лівий/верхній край, 1 — правий/нижній.
+  // Окремому чоботу можна дати СВОЮ зону — допиши йому в списку
+  // `boots` поле area: { top: 0.11 }. Не вказані числа беруться
+  // звідси. Це знадобилось крилатому: крило високе, і спільна
+  // стеля тиснула сам черевик удвічі.
   bootArea: {
     on:    true,   // false — не обмежувати нічим, як було раніше
     top:   0.17,   // вище цієї лінії чобіт не піднімається
@@ -232,6 +268,13 @@ export const TUNING = {
 
   // ── ПОРЯДОК ЧОБІТ ────────────────────────────────────────────
   // Числа — місця в списку `boots` вище, рахуючи з 1.
+  // Зараз чобіт 14, тобто дозволені числа 1...14:
+  //   1 Leather Ankle Boot   6 Jester Slipper    11 Crimson Lace
+  //   2 Rubber Duck          7 Winged Boot       12 Thornroot Boot
+  //   3 Trojan Horse         8 Flamingo Royale   13 Clown Stomper
+  //   4 Trail Sneaker        9 Melting Pump      14 Glass Slipper
+  //   5 Nightshade Heel     10 Ducky Sock
+  // Приклад на коротке демо:  bootOrder: [13, 8, 1, 14],
   // Порожній список означає «грати підряд, як написано в boots».
   //
   // Так можна міняти порядок, не чіпаючи сам список: наприклад
@@ -382,6 +425,18 @@ export const TUNING = {
     // Розмір і місце рахуються по САМІЙ стопі, без прозорих полів,
     // тому числа не попливуть, якщо заміните картинку на іншу.
     // Ці три числа зняті з референсної картинки композиції.
+    // true  — усі ноги виходять ОДНАКОВОЇ ДОВЖИНИ. Розмір задає
+    //         перша нога через heightPercent нижче, решта
+    //         підганяються під неї.
+    //         Це не примха: ноги намальовані з різною кількістю
+    //         гомілки, і якщо рівняти їх по висоті кадру, сама
+    //         стопа виходить різного розміру — заміряно 714 проти
+    //         841 пікселя, тобто друга на 18% довша. А по довжині
+    //         стопи гра підганяє чоботи, тож на другому житті все
+    //         ставало більшим.
+    // false — стара поведінка: однакова ВИСОТА, різна довжина.
+    sameLength: true,
+
     heightPercent: 0.79,   // яку частину висоти екрана займає стопа
     standX:        0.517,  // де по горизонталі вона стоїть (частка ширини)
     standY:        0.7375, // на якій висоті підошва (частка висоти)
