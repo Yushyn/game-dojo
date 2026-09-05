@@ -54,8 +54,9 @@ let hooks = {};
 // ── Чоботи ────────────────────────────────────────────────────
 let boots = [];
 let bgImage = null;      // фон, якщо є
-let girlSheet = null;    // спрайтшит дівчинки: усі кадри в одній картинці
-let girlT0 = 0;          // мить, коли її анімація почалась — від неї рахуємо кадр
+let girlVideo = null;    // відео дівчинки — основний, найякісніший варіант
+let girlSheet = null;    // спрайтшит: запасний варіант, якщо відео не пішло
+let girlT0 = 0;          // мить, коли її анімація почалась — для спрайтшита
 let pedImage = null;     // окремий шар пʼєдестала поверх неї
 let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
 
@@ -110,11 +111,7 @@ export function start(canvasEl, callbacks) {
       .then((im) => { bgImage = im; })
       .catch((e) => console.warn('Фон не завантажився:', e.message));
   }
-  if (T.girl?.show) {
-    loadImage(T.girl.sheet)
-      .then((im) => { girlSheet = im; })
-      .catch((e) => console.warn('Дівчинка не завантажилась:', e.message));
-  }
+  if (T.girl?.show) loadGirl();
   if (T.pedestal?.show) {
     loadImage(T.pedestal.src)
       .then((im) => { pedImage = im; })
@@ -689,6 +686,7 @@ export function reset() {
   // з меню). Саме тут відлік анімації дівчинки починається спочатку,
   // щоб гравець завжди бачив її з першого кадру, а не з середини циклу.
   girlT0 = performance.now();
+  if (girlVideo) { try { girlVideo.currentTime = 0; girlVideo.play(); } catch (e) {} }
 
   if (game.phase === 'loading') return;   // картинки ще їдуть, чіпати нічого
   game.score = 0;
@@ -798,8 +796,78 @@ function frame(now) {
   }
 }
 
-// Дівчинка. Її анімація — не вигадана кодом, а справжня: усі кадри
-// лежать поруч в одній картинці (спрайтшит), і ми просто показуємо
+// ══════════════════════════════════════════════════════════════
+//  ДІВЧИНКА
+// ══════════════════════════════════════════════════════════════
+//
+//  Основний варіант — відео webm із прозорістю. Воно вдвічі детальніше
+//  за спрайтшит і при цьому легше, бо стискається як відео, а не як
+//  вісімдесят окремих картинок. Малюємо його на канвас як звичайну
+//  картинку — це браузери роблять надійно, на відміну від анімованого
+//  webp, який на канвасі застигає першим кадром.
+//
+//  Але прозорість у webm розуміє не кожен браузер. Тому після запуску
+//  ми перевіряємо це на ділі: беремо піксель у кутку, який зобовʼязаний
+//  бути прозорим. Якщо він раптом непрозорий — браузер альфу не тягне,
+//  і замість дівчинки був би чорний прямокутник. У такому разі тихо
+//  переходимо на спрайтшит.
+
+function loadGirl() {
+  const G = T.girl;
+  const v = document.createElement('video');
+  v.muted = true; v.loop = true; v.playsInline = true;
+  v.preload = 'auto'; v.autoplay = true;
+  v.src = G.video;
+
+  v.addEventListener('error', () => {
+    console.warn('Відео дівчинки не пішло, беру спрайтшит');
+    useGirlSheet();
+  });
+
+  v.addEventListener('loadeddata', () => {
+    if (!checkAlpha(v)) {
+      console.warn('Браузер не тягне прозорість у webm — беру спрайтшит');
+      useGirlSheet();
+      return;
+    }
+    girlVideo = v;
+    v.playbackRate = G.speed || 1;
+    v.play().catch(() => {});
+  });
+}
+
+// Чи справді видно прозорість: кут кадру має бути порожнім
+function checkAlpha(v) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.clearRect(0, 0, 32, 32);
+    g.drawImage(v, 0, 0, 32, 32);
+    return g.getImageData(1, 1, 1, 1).data[3] < 128;
+  } catch (e) {
+    return false;   // не змогли перевірити — вважаємо, що ні
+  }
+}
+
+function useGirlSheet() {
+  girlVideo = null;
+  if (girlSheet) return;
+  loadImage(T.girl.sheet)
+    .then((im) => { girlSheet = im; girlT0 = performance.now(); })
+    .catch((e) => console.warn('Дівчинка не завантажилась зовсім:', e.message));
+}
+
+// Куди її класти на екрані — однаково для відео й для спрайтшита
+function girlBox() {
+  const G = T.girl;
+  const h = GAME.height * G.heightPercent;
+  const w = h * (girlAspect || 0.6846);
+  return { x: GAME.width * G.centerX - w / 2, y: GAME.height * G.bottomY - h, w, h };
+}
+let girlAspect = 0;
+
+// Запасний шлях: усі кадри лежать поруч в одній картинці, показуємо
 // потрібний прямокутник. Кадр рахується від часу, тому швидкість не
 // залежить від того, наскільки потужний компʼютер.
 //
@@ -807,24 +875,27 @@ function frame(now) {
 // повертається на нульовий.
 function drawGirl(now) {
   const G = T.girl;
-  if (!G || !G.show || !girlSheet) return;
+  if (!G || !G.show) return;
 
+  if (girlVideo && girlVideo.readyState >= 2) {
+    girlAspect = girlVideo.videoWidth / girlVideo.videoHeight;
+    const b = girlBox();
+    ctx.drawImage(girlVideo, b.x, b.y, b.w, b.h);
+    return;
+  }
+
+  if (!girlSheet) return;
   const cols = Math.max(1, G.cols);
   const rows = Math.ceil(G.frames / cols);
   const fw = girlSheet.width / cols;      // розмір одного кадру в спрайтшиті
   const fh = girlSheet.height / rows;
+  girlAspect = fw / fh;
 
   const elapsed = Math.max(0, now - girlT0);
   const i = Math.floor(elapsed / 1000 * G.fps) % G.frames;
-  const sx = (i % cols) * fw;
-  const sy = Math.floor(i / cols) * fh;
-
-  const h = GAME.height * G.heightPercent;
-  const w = h * (fw / fh);
-  const x = GAME.width * G.centerX - w / 2;
-  const y = GAME.height * G.bottomY - h;
-
-  ctx.drawImage(girlSheet, sx, sy, fw, fh, x, y, w, h);
+  const b = girlBox();
+  ctx.drawImage(girlSheet, (i % cols) * fw, Math.floor(i / cols) * fh, fw, fh,
+                b.x, b.y, b.w, b.h);
 }
 
 // Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
