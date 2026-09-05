@@ -160,6 +160,25 @@ export const TUNING = {
       name: 'Nightshade Heel',    passPercent: 64, cutOffset: 0.17 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
       name: 'Jester Slipper',     passPercent: 79 },
+
+    // ── Нові чоботи ──────────────────────────────────────────
+    // Назви можна міняти прямо тут — гравець бачить саме їх
+    // угорі ліворуч замість номера раунду.
+    { src: 'assets/boot7.png', outline: 'assets/boot7-outline.png',
+      name: 'Winged Boot',        passPercent: 45 },
+    { src: 'assets/boot8.png', outline: 'assets/boot8-outline.png',
+      name: 'Flamingo Royale',    passPercent: 49 },
+    { src: 'assets/boot9.png', outline: 'assets/boot9-outline.png',
+      name: 'Melting Pump',       passPercent: 68 },
+    // УВАГА: шкарпетка — це фактично форма самої стопи, тому
+    // недоторкана нога вже дає 97.5% збігу. Раунд «на не зіпсуй»:
+    // поріг 98 означає, що виграє той, хто майже нічого не чіпав.
+    // Якщо хочеться звичайного раунду — цей чобіт краще прибрати
+    // або поставити поріг 99, але 100 недосяжно.
+    { src: 'assets/boot10.png', outline: 'assets/boot10-outline.png',
+      name: 'Ducky Sock',         passPercent: 98 },
+    { src: 'assets/boot11.png', outline: 'assets/boot11-outline.png',
+      name: 'Crimson Lace',       passPercent: 32 },
   ],
 
   // ── ДЕ МОЖЕ СТОЯТИ ЧОБІТ ─────────────────────────────────────
@@ -415,7 +434,7 @@ export const TUNING = {
     // ні для стопи, ні для чобота.
     cutAboveBoot: true,
     cutOffset:    0,     // зсув лінії, у частках висоти чобота (+ вниз)
-    showCutLine:  true, // показувати червону лінію на екрані
+    showCutLine:  false, // показувати червону лінію на екрані
     cutLineColor: 'rgba(255, 90, 90, 0.45)',
   },
 
