@@ -396,6 +396,17 @@
   }
 
 
+
+  /* ══ ЕКРАН ПРОГРАШУ ══════════════════════════════════════════
+     Замість суцільного затемнення — мʼяка підкладка знизу вгору.
+     Поки ролик світлий, вона тримає читабельність тексту; коли
+     він згасає до чорного, її просто не видно. */
+  .lost-shade {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(to top, rgba(7,6,11,.85) 0%,
+                                        rgba(7,6,11,.45) 45%,
+                                        rgba(7,6,11,.15) 100%);
+  }
   /* ══ АВТОРИ ══════════════════════════════════════════════════
      Підписи стоять не рівною сіткою, а кожен під своєю людиною:
      відсотки лежать у tuning.js і зняті з самої картинки по
@@ -929,7 +940,11 @@
      Показується сам, коли скінчились життя. -->
 <section class="screen screen-page" data-screen="lost">
   <div class="frame frame-art" data-art>
-    <div class="veil"></div>
+    <!-- Ролик із гільйотиною. Грає ОДИН раз і завмирає на своєму
+         останньому кадрі — а він чорний, тому напис і кнопки
+         поверх нього читаються без жодного затемнення. -->
+    <video class="bg-video" id="s-lost-video" playsinline preload="auto"></video>
+    <div class="lost-shade"></div>
     <div class="page">
       <h2 class="page-title" id="s-lost-title">Гру програно</h2>
       <p class="result-score"><span id="s-lost-note">Життя скінчились.</span></p>

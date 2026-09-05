@@ -445,6 +445,16 @@ export const TUNING = {
     // Видно лише на телефоні, повернутому вертикально
     rotateHint: 'Rotate your device',
 
+    // Ролик на екрані програшу. Грає ОДИН раз і завмирає на
+    // останньому кадрі — він чорний, тому текст поверх нього
+    // читається сам собою.
+    lostVideo: {
+      sources: ['assets/auch.webm', 'assets/auch.mp4'],  // браузер бере той, що вміє
+      poster:  'assets/auch-poster.jpg',
+      volume:  0.8,    // 0..1, слухається спільного вимикача звуку
+      play:    true,   // false — лишиться нерухомий кадр
+    },
+
     btnNewGame:     'New Game',
     btnLeaderboard: 'Leaderboards',
     btnCredits:     'Credits',
