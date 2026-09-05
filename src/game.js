@@ -54,6 +54,9 @@ let hooks = {};
 // ── Чоботи ────────────────────────────────────────────────────
 let boots = [];
 let bgImage = null;      // фон, якщо є
+let girlSheet = null;    // спрайтшит дівчинки: усі кадри в одній картинці
+let girlT0 = 0;          // мить, коли її анімація почалась — від неї рахуємо кадр
+let pedImage = null;     // окремий шар пʼєдестала поверх неї
 let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
 
 // ── Хід гри ───────────────────────────────────────────────────
@@ -96,14 +99,26 @@ export function start(canvasEl, callbacks) {
   ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  girlT0 = performance.now();
   requestAnimationFrame(frame);
 
   try { bindPointer(); } catch (e) { return fail('Помилка запуску: ' + e.message); }
 
+  // Декорації не критичні: якщо файлу немає, гра просто малює без нього.
   if (T.background.show) {
     loadImage(T.background.src)
       .then((im) => { bgImage = im; })
       .catch((e) => console.warn('Фон не завантажився:', e.message));
+  }
+  if (T.girl?.show) {
+    loadImage(T.girl.sheet)
+      .then((im) => { girlSheet = im; })
+      .catch((e) => console.warn('Дівчинка не завантажилась:', e.message));
+  }
+  if (T.pedestal?.show) {
+    loadImage(T.pedestal.src)
+      .then((im) => { pedImage = im; })
+      .catch((e) => console.warn('Пʼєдестал не завантажився:', e.message));
   }
 
   const list = [T.image.src].concat(T.boots.map((b) => b.src));
@@ -670,6 +685,11 @@ export function action() {
 // Повернутись до стану «стоїмо на порожній сцені й чекаємо».
 // Потрібно кнопці «Нова гра» в меню: обнуляє очки, раунд і стопу.
 export function reset() {
+  // Викликається щоразу при вході на екран гри («Нова гра» і повернення
+  // з меню). Саме тут відлік анімації дівчинки починається спочатку,
+  // щоб гравець завжди бачив її з першого кадру, а не з середини циклу.
+  girlT0 = performance.now();
+
   if (game.phase === 'loading') return;   // картинки ще їдуть, чіпати нічого
   game.score = 0;
   game.round = 0;
@@ -743,9 +763,13 @@ function frame(now) {
   updateTimers(now || performance.now());
   if (wasEdit !== game.canEdit || wasPhase !== game.phase) notify();
 
+  // Порядок шарів: фон, дівчинка, пʼєдестал, і вже потім стопа з чоботами.
+  // Пʼєдестал іде поверх дівчинки саме для того, щоб її сукня не лізла на камінь.
   ctx.fillStyle = T.colors.stage;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
   if (bgImage) ctx.drawImage(bgImage, 0, 0, GAME.width, GAME.height);
+  drawGirl(now || performance.now());
+  if (pedImage) ctx.drawImage(pedImage, 0, 0, GAME.width, GAME.height);
 
   if (failed) return drawFail();
   if (game.phase === 'loading') return drawCentered('Завантаження…', T.colors.dim, 30);
@@ -772,6 +796,35 @@ function frame(now) {
     text(anchorHint || 'Alt + клік — пересунути опору, Alt + колесо — радіус',
          40, GAME.height - 34, anchorHint ? T.colors.good : T.colors.dim, 22);
   }
+}
+
+// Дівчинка. Її анімація — не вигадана кодом, а справжня: усі кадри
+// лежать поруч в одній картинці (спрайтшит), і ми просто показуємо
+// потрібний прямокутник. Кадр рахується від часу, тому швидкість не
+// залежить від того, наскільки потужний компʼютер.
+//
+// Цикл замикається сам собою: після останнього кадру лічильник
+// повертається на нульовий.
+function drawGirl(now) {
+  const G = T.girl;
+  if (!G || !G.show || !girlSheet) return;
+
+  const cols = Math.max(1, G.cols);
+  const rows = Math.ceil(G.frames / cols);
+  const fw = girlSheet.width / cols;      // розмір одного кадру в спрайтшиті
+  const fh = girlSheet.height / rows;
+
+  const elapsed = Math.max(0, now - girlT0);
+  const i = Math.floor(elapsed / 1000 * G.fps) % G.frames;
+  const sx = (i % cols) * fw;
+  const sy = Math.floor(i / cols) * fh;
+
+  const h = GAME.height * G.heightPercent;
+  const w = h * (fw / fh);
+  const x = GAME.width * G.centerX - w / 2;
+  const y = GAME.height * G.bottomY - h;
+
+  ctx.drawImage(girlSheet, sx, sy, fw, fh, x, y, w, h);
 }
 
 // Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
