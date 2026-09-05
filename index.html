@@ -4,8 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Game Dojo</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&display=swap">
+
 <style>
   :root {
+    /* Стара палітра ігрової панелі — лишається як була */
     --bg: #0c0b12;
     --panel: #16141f;
     --line: #2b2840;
@@ -13,35 +20,202 @@
     --dim: #8b869e;
     --accent: #7bdff2;
     --gold: #ffd166;
+
+    /* Палітра екранів меню: бальний зал при свічках */
+    --night:      #07060b;   /* глибокий чорний із синцем */
+    --velvet:     #180d18;   /* винний оксамит */
+    --candle:     #d8ab63;   /* золото свічки */
+    --candle-lit: #f4dfb4;   /* золото на світлі */
+    --bone:       #ece3d4;   /* колір тексту */
+    --ash:        #9a8f9c;   /* приглушений текст */
+    --rose:       #b4788c;   /* та сама рожева, що й опора */
+
+    --display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+    --prose:   'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    --mono:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
-    min-height: 100vh;
-    background: var(--bg);
-    color: var(--ink);
-    font: 15px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    display: flex;
-    align-items: flex-start;
-    padding: 20px;
-    gap: 18px;
+    background: var(--night);
+    color: var(--bone);
+    font: 15px/1.5 var(--mono);
+    -webkit-font-smoothing: antialiased;
   }
-  h1 {
-    font-size: 13px;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin: 0 0 10px;
-    font-weight: 500;
+
+  /* ══ ЕКРАНИ ══════════════════════════════════════════════════
+     Видно рівно один. Перемикає src/screens.js. */
+  .screen { display: none; }
+  .screen.on { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
+  .screen-game.on {
+    display: flex; align-items: flex-start; gap: 18px; padding: 20px; place-items: initial;
   }
-  h2 {
-    font-size: 12px;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin: 0 0 10px;
-    font-weight: 500;
+
+  /* Рамка 16:9 — той самий кадр, що й полотно гри,
+     щоб меню й гра не стрибали по розміру. */
+  .frame {
+    position: relative;
+    width: min(100%, (100vh - 40px) * 16 / 9);
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border: 1px solid #241a26;
   }
+  .frame-dark {
+    background:
+      radial-gradient(70% 55% at 50% 42%, #221327 0%, rgba(10,8,14,0) 70%),
+      var(--night);
+  }
+  .frame-art {
+    background: var(--night) center / cover no-repeat;
+  }
+  /* Затемнення під текст. Лежить під контентом, кліки не ловить. */
+  .frame-art::before {
+    content: '';
+    position: absolute; inset: 0; z-index: 0;
+    background: radial-gradient(115% 85% at 25% 35%, rgba(7,6,11,0) 35%, rgba(7,6,11,.82) 100%);
+  }
+  .frame-art > * { position: relative; z-index: 1; }
+  .veil { position: absolute; inset: 0; background: rgba(7,6,11,.78); }
+
+  /* ══ ЧОРНИЙ ЕКРАН «PRESS TO START» ═══════════════════════════
+     Чорне тло на весь екран, жодної графіки, одна кнопка. */
+  .screen-press.on { background: #000; padding: 0; }
+  .press {
+    all: unset;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: clamp(14px, 1.5vw, 20px);
+    letter-spacing: .32em;
+    color: #cfc9c0;
+    padding: 14px 20px;
+    animation: pulse 2.4s ease-in-out infinite;
+    transition: color .2s;
+  }
+  .press:hover, .press:focus-visible { color: #fff; animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .38 } }
+
+  .center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 0 8%;
+  }
+  .logo {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(28px, 4.4vw, 62px);
+    letter-spacing: .1em;
+    color: var(--candle-lit);
+    margin: 0;
+    text-shadow: 0 0 42px rgba(216,171,99,.28), 0 2px 20px rgba(0,0,0,.9);
+  }
+  /* ══ ЗАВАНТАЖЕННЯ ════════════════════════════════════════════ */
+  .load-note {
+    font-family: var(--prose); font-style: italic;
+    font-size: clamp(15px, 1.5vw, 21px);
+    color: var(--ash); margin: 0 0 22px;
+  }
+  .load-track {
+    width: min(360px, 60%); height: 1px;
+    background: rgba(236,227,212,.14);
+    position: relative; overflow: hidden;
+  }
+  .load-fill {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, rgba(216,171,99,.3), var(--candle-lit));
+    box-shadow: 0 0 14px rgba(216,171,99,.7);
+    transition: width .25s linear;
+  }
+  .load-pct {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .2em;
+    color: var(--ash); margin: 16px 0 0;
+  }
+
+  /* ══ ГОЛОВНЕ МЕНЮ ════════════════════════════════════════════ */
+  .logo-corner {
+    position: absolute; left: 5%; top: 8%;
+    font-size: clamp(20px, 2.6vw, 38px);
+    text-align: left;
+  }
+  .menu {
+    position: absolute; right: 5.5%; bottom: 9%;
+    display: grid; gap: 6px; justify-items: end;
+  }
+  .menu-item {
+    all: unset;
+    cursor: pointer;
+    font-family: var(--prose);
+    font-size: clamp(19px, 2.3vw, 34px);
+    letter-spacing: .05em;
+    color: var(--bone);
+    padding: 4px 2px;
+    border-bottom: 1px solid transparent;
+    text-shadow: 0 2px 16px rgba(0,0,0,.95);
+    transition: color .25s, border-color .25s;
+  }
+  .menu-item:hover, .menu-item:focus-visible {
+    color: var(--candle-lit);
+    border-bottom-color: var(--candle);
+  }
+
+  /* ══ СТОРІНКИ (лідерборд, автори) ════════════════════════════ */
+  .page {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 5% 8%;
+  }
+  .page-title {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(20px, 2.4vw, 34px);
+    letter-spacing: .14em; color: var(--candle-lit);
+    margin: 0 0 6px;
+  }
+  .page-body {
+    width: min(560px, 100%);
+    max-height: 62%;
+    overflow-y: auto;
+    margin: 22px 0 0;
+  }
+  .board-big { list-style: none; margin: 0; padding: 0; font-family: var(--prose); }
+  .board-big li {
+    display: flex; gap: 16px; align-items: baseline;
+    padding: 9px 2px;
+    border-bottom: 1px solid rgba(236,227,212,.1);
+    font-size: clamp(16px, 1.6vw, 22px);
+  }
+  .board-big .rank { color: var(--ash); width: 2em; font-family: var(--mono); font-size: .8em; }
+  .board-big .who  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-big .pts  { color: var(--candle); }
+  .board-big li.empty { color: var(--ash); border: 0; font-style: italic; justify-content: center; }
+
+  .credits-list { font-family: var(--prose); text-align: center; }
+  .credits-role {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .22em;
+    color: var(--ash); margin: 26px 0 8px;
+  }
+  .credits-role:first-child { margin-top: 0; }
+  .credits-name { font-size: clamp(17px, 1.8vw, 25px); color: var(--bone); margin: 3px 0; }
+
+  .back {
+    all: unset; cursor: pointer;
+    /* all:unset скидає і z-index, тому ставимо його явно —
+       інакше шар .page перекриває кнопку і клік не доходить. */
+    position: absolute; left: 5%; bottom: 8%; z-index: 2;
+    font-family: var(--prose); font-size: clamp(15px, 1.5vw, 21px);
+    color: var(--ash);
+    border-bottom: 1px solid transparent;
+    transition: color .25s, border-color .25s;
+  }
+  .back:hover, .back:focus-visible { color: var(--candle-lit); border-bottom-color: var(--candle); }
+
+  /* ══ ЕКРАН ГРИ — як було ═════════════════════════════════════ */
+  /* Написи ігрової панелі. Селектори навмисно вузькі, щоб ці
+     правила не діставали заголовків на екранах меню. */
+  .hud-title, aside h2 {
+    font-size: 13px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 10px; font-weight: 500; font-family: var(--mono);
+  }
+  aside h2 { font-size: 12px; letter-spacing: .16em; }
 
   /* Полотно 1920×1080. Внутрішній розмір фіксований, на екран
      розтягується через CSS зі збереженням пропорції 16:9. */
@@ -59,12 +233,8 @@
   }
   .stage { flex: 1 1 auto; min-width: 0; }
   .hud {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-top: 8px;
-    color: var(--dim);
-    font-size: 13px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 8px; color: var(--dim); font-size: 13px;
   }
   .hud b { color: var(--gold); font-weight: 600; }
 
@@ -75,121 +245,175 @@
     padding: 16px;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
+    font-family: var(--mono);
   }
   .sep { height: 1px; background: var(--line); margin: 18px 0; }
 
-  /* Кнопки інструментів */
   .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .tools button {
-    padding: 9px 6px;
-    font-size: 13px;
-    text-align: center;
-  }
+  .tools button { padding: 9px 6px; font-size: 13px; text-align: center; }
   .tools button.wide { grid-column: 1 / -1; }
-  .tools button.on {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: #101a1f;
-  }
+  .tools button.on { border-color: var(--accent); color: var(--accent); background: #101a1f; }
 
-  /* Головна кнопка */
   button.primary {
-    margin-top: 16px;
-    padding: 12px 10px;
-    border-color: var(--accent);
-    color: var(--accent);
-    background: #101a1f;
-    font-size: 15px;
+    margin-top: 16px; padding: 12px 10px;
+    border-color: var(--accent); color: var(--accent);
+    background: #101a1f; font-size: 15px;
   }
   button.primary:hover { background: #16242b; }
 
-  /* Табло */
+  button.ghost {
+    margin: 0 0 14px; padding: 6px 8px; font-size: 12px;
+    color: var(--dim); background: transparent;
+  }
+
   .stats { margin-top: 18px; }
   .stat {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 13px;
-    color: var(--dim);
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid var(--line);
+    font-size: 13px; color: var(--dim);
   }
   .stat b { color: var(--ink); font-weight: 600; font-size: 15px; }
   .stat b.gold { color: var(--gold); }
   .stat b.warn { color: #ff7a7a; }
 
-  ol { list-style: none; margin: 0 0 14px; padding: 0; }
-  li { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
-  li.empty { color: var(--dim); border: 0; font-size: 13px; }
-  .rank { color: var(--dim); width: 1.5em; }
-  .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pts { color: var(--gold); }
+  aside ol { list-style: none; margin: 0 0 14px; padding: 0; }
+  aside li { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  aside li.empty { color: var(--dim); border: 0; font-size: 13px; }
+  aside .rank { color: var(--dim); width: 1.5em; }
+  aside .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  aside .pts { color: var(--gold); }
 
-  input, button {
-    font: inherit;
-    width: 100%;
-    padding: 8px 10px;
-    background: #0c0b12;
-    color: var(--ink);
-    border: 1px solid var(--line);
+  aside input, aside button {
+    font: inherit; width: 100%; padding: 8px 10px;
+    background: #0c0b12; color: var(--ink); border: 1px solid var(--line);
   }
-  button { cursor: pointer; margin-top: 8px; }
-  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  button:disabled { opacity: .5; cursor: default; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  aside button { cursor: pointer; margin-top: 8px; }
+  aside button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  aside button:disabled { opacity: .5; cursor: default; }
   .status { color: var(--dim); font-size: 12px; min-height: 2em; margin-top: 8px; }
   .keys { color: var(--dim); font-size: 11px; margin-top: 14px; line-height: 1.7; }
   .keys b { color: var(--ink); font-weight: 600; }
 
+  :focus-visible { outline: 1px solid var(--candle); outline-offset: 3px; }
+
   @media (max-width: 1000px) {
-    body { flex-wrap: wrap; padding: 12px; }
+    .screen-game.on { flex-wrap: wrap; padding: 12px; }
     .stage { flex: 1 1 100%; }
     aside { flex: 1 1 100%; max-height: none; }
     canvas { max-height: none; }
+    .frame { width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
   }
 </style>
 </head>
 <body>
 
-<div class="stage">
-  <h1 id="title">Game Dojo</h1>
-  <canvas id="stage"></canvas>
-  <div class="hud">
-    <span id="hint">Тягни мишкою по картинці</span>
+<!-- ══ 1. ЧОРНИЙ ЕКРАН ══════════════════════════════════════════
+     Тут нічого немає, крім однієї кнопки, і це навмисно.
+     Браузер забороняє грати звук, доки людина хоч раз не клацне
+     по сторінці. Цей клік і є дозволом: після нього ми вмикаємо
+     аудіо, і далі музика вже може стартувати сама. -->
+<section class="screen screen-press" data-screen="press">
+  <button class="press" id="s-press" data-go="loading">PRESS TO START</button>
+</section>
 
+<!-- ══ 2. ЗАВАНТАЖЕННЯ ═══════════════════════════════════════════
+     Смужка показує справжній прогрес: фон, стопа, чоботи. -->
+<section class="screen screen-loading" data-screen="loading">
+  <div class="frame frame-dark">
+    <div class="center">
+      <p class="load-note" id="s-load-note">Готуємо сцену</p>
+      <div class="load-track"><i class="load-fill" id="s-load-fill"></i></div>
+      <p class="load-pct" id="s-load-pct">0%</p>
+    </div>
   </div>
-</div>
+</section>
 
-<aside>
-  <h2 id="tools-title">Інструмент</h2>
-  <div class="tools">
-    <button data-tool="push" id="tool-push">Рухати</button>
-    <button data-tool="restore" id="tool-restore">Відновити</button>
+<!-- ══ 3. ГОЛОВНЕ МЕНЮ ══════════════════════════════════════════ -->
+<section class="screen screen-menu" data-screen="menu">
+  <div class="frame frame-art" data-art>
+    <h1 class="logo logo-corner" id="s-menu-title">Game Dojo 2026</h1>
+    <nav class="menu">
+      <button class="menu-item" data-go="game"        id="s-go-game">Нова гра</button>
+      <button class="menu-item" data-go="leaderboard" id="s-go-board">Лідерборд</button>
+      <button class="menu-item" data-go="credits"     id="s-go-credits">Автори</button>
+    </nav>
+  </div>
+</section>
+
+<!-- ══ 4. ЛІДЕРБОРД ═════════════════════════════════════════════ -->
+<section class="screen screen-page" data-screen="leaderboard">
+  <div class="frame frame-art" data-art>
+    <div class="veil"></div>
+    <div class="page">
+      <h2 class="page-title" id="s-board-title">Лідерборд</h2>
+      <div class="page-body">
+        <ol class="board-big" id="board-full"><li class="empty">Завантаження…</li></ol>
+      </div>
+    </div>
+    <button class="back" data-go="menu">Назад</button>
+  </div>
+</section>
+
+<!-- ══ 5. АВТОРИ ════════════════════════════════════════════════ -->
+<section class="screen screen-page" data-screen="credits">
+  <div class="frame frame-art" data-art>
+    <div class="veil"></div>
+    <div class="page">
+      <h2 class="page-title" id="s-credits-title">Автори</h2>
+      <div class="page-body">
+        <div class="credits-list" id="credits-list"></div>
+      </div>
+    </div>
+    <button class="back" data-go="menu">Назад</button>
+  </div>
+</section>
+
+<!-- ══ 6. ГРА ═══════════════════════════════════════════════════ -->
+<section class="screen screen-game" data-screen="game">
+  <div class="stage">
+    <h1 class="hud-title" id="title">Game Dojo</h1>
+    <canvas id="stage"></canvas>
+    <div class="hud">
+      <span id="hint">Тягни мишкою по стопі</span>
+    </div>
   </div>
 
-  <button id="action" class="primary">Почати</button>
+  <aside>
+    <button class="ghost" data-go="menu">← До меню</button>
 
-  <div class="stats">
-    <div class="stat"><span>Раунд</span><b id="round">—</b></div>
-    <div class="stat"><span>Чобіт</span><b id="boot-name">—</b></div>
-    <div class="stat"><span>Час</span><b id="timer">—</b></div>
-    <div class="stat"><span>Очки</span><b id="score" class="gold">0</b></div>
-  </div>
+    <h2 id="tools-title">Інструмент</h2>
+    <div class="tools">
+      <button data-tool="push" id="tool-push">Рухати</button>
+      <button data-tool="restore" id="tool-restore">Відновити</button>
+    </div>
 
-  <p class="keys">
-    <b>1</b> — Рухати, <b>2</b> — Відновити<br>
-    <b>Ctrl+Z</b> — крок назад<br>
-    Рожеве коло — опора, там стопа не рухається
-  </p>
+    <button id="action" class="primary">Почати</button>
 
-  <div class="sep"></div>
+    <div class="stats">
+      <div class="stat"><span>Раунд</span><b id="round">—</b></div>
+      <div class="stat"><span>Чобіт</span><b id="boot-name">—</b></div>
+      <div class="stat"><span>Час</span><b id="timer">—</b></div>
+      <div class="stat"><span>Очки</span><b id="score" class="gold">0</b></div>
+    </div>
 
-  <h2 id="board-title">Топ-10</h2>
-  <ol id="board"><li class="empty">Завантаження…</li></ol>
-  <input id="name" maxlength="24" placeholder="Твоє імʼя" aria-label="Твоє імʼя">
-  <button id="save">Зберегти результат</button>
-  <p class="status" id="status"></p>
-</aside>
+    <p class="keys">
+      <b>1</b> — Рухати, <b>2</b> — Відновити<br>
+      <b>Ctrl+Z</b> — крок назад<br>
+      Рожеве коло — опора, там стопа не рухається
+    </p>
+
+    <div class="sep"></div>
+
+    <h2 id="board-title">Топ-10</h2>
+    <ol id="board"><li class="empty">Завантаження…</li></ol>
+    <input id="name" maxlength="24" placeholder="Твоє імʼя" aria-label="Твоє імʼя">
+    <button id="save">Зберегти результат</button>
+    <p class="status" id="status"></p>
+  </aside>
+</section>
 
 <!-- Звичайний скрипт, не модуль: він єдиний, що працює при відкритті
      файлу з диска. Його завдання — пояснити, чому решта не працює. -->
@@ -200,8 +424,8 @@ if (location.protocol === 'file:') {
     box.style.cssText = 'position:fixed;inset:0;z-index:99;background:#0c0b12;' +
       'display:flex;align-items:center;justify-content:center;padding:40px;';
     box.innerHTML =
-      '<div style="max-width:640px;border:1px solid #ff7a7a;background:#16141f;padding:28px 32px">' +
-      '<h2 style="margin:0 0 14px;color:#ff7a7a;font-size:20px;letter-spacing:0">' +
+      '<div style="max-width:640px;border:1px solid #ff7a7a;background:#16141f;padding:28px 32px;font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#e8e6f0">' +
+      '<h2 style="margin:0 0 14px;color:#ff7a7a;font-size:20px;letter-spacing:0;text-transform:none">' +
       'Сторінку відкрито неправильно</h2>' +
       '<p style="margin:0 0 14px;color:#e8e6f0">Ти відкрила файл подвійним кліком, ' +
       'прямо з диска. Так браузер із міркувань безпеки блокує весь код сторінки — ' +

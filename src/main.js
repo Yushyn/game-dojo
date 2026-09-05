@@ -1,8 +1,9 @@
-// Звʼязок сторінки з грою: кнопки інструментів, кнопка дії, лідерборд.
+// Звʼязок сторінки з грою: екрани, кнопки інструментів, кнопка дії, лідерборд.
 
 import { TUNING } from './tuning.js';
-import { start, tool, setTool, undo, action, getState } from './game.js';
+import { start, tool, setTool, undo, action, reset, getState } from './game.js';
 import { topScores, submitScore, initDb, dbReady } from './db.js';
+import { initScreens, showScreen, currentScreen } from './screens.js';
 
 const t = TUNING.texts;
 const $ = (id) => document.getElementById(id);
@@ -19,7 +20,7 @@ addEventListener('error', (e) => {
   if (s) s.textContent = 'Помилка: ' + e.message;
 });
 
-// ── Тексти ────────────────────────────────────────────────────
+// ── Тексти ігрового екрана ────────────────────────────────────
 document.title = t.title;
 put('title', 'textContent', t.title);
 put('hint', 'textContent', t.hint);
@@ -36,6 +37,7 @@ if (missing.length) {
 }
 
 // ── Запуск гри ────────────────────────────────────────────────
+// Картинки їдуть одразу, ще поки людина дивиться на титульний екран.
 const canvas = $('stage');
 const statusEl = $('status');
 if (!canvas) console.error('У index.html немає <canvas id="stage">.');
@@ -43,6 +45,16 @@ if (!canvas) console.error('У index.html немає <canvas id="stage">.');
 start(canvas, {
   onUpdate: render,
   onError: (why) => { if (statusEl) statusEl.textContent = why; },
+});
+
+// ── Екрани ────────────────────────────────────────────────────
+initScreens({
+  // екран завантаження чекає саме на цю відповідь
+  isGameReady: () => getState().phase !== 'loading',
+
+  onNewGame:  () => reset(),          // «Нова гра» — очки з нуля
+  onLeaveGame: () => reset(),         // вийшли з гри в меню — раунд скидаємо
+  onOpenLeaderboard: () => refreshBoard(),
 });
 
 // ── Інструменти ───────────────────────────────────────────────
@@ -60,6 +72,7 @@ actionBtn?.addEventListener('click', () => action());
 
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
+  if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   if (e.key === '1') selectTool('push');
   if (e.key === '2') selectTool('restore');
@@ -108,7 +121,11 @@ setInterval(() => render(), 250);
 render();
 
 // ── Лідерборд ─────────────────────────────────────────────────
-const nameEl = $('name'), saveBtn = $('save'), boardEl = $('board');
+// Той самий список показується у двох місцях: у панелі збоку від
+// гри і на окремому екрані з меню.
+const nameEl = $('name'), saveBtn = $('save');
+const boards = [$('board'), $('board-full')].filter(Boolean);
+
 if (nameEl) {
   nameEl.value = localStorage.getItem('player') || '';
   nameEl.addEventListener('input', () => localStorage.setItem('player', nameEl.value));
@@ -119,13 +136,15 @@ function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function paintBoard(html) { boards.forEach((el) => { el.innerHTML = html; }); }
+
 async function refreshBoard() {
-  if (!boardEl) return;
-  if (!dbReady) { boardEl.innerHTML = '<li class="empty">База недоступна</li>'; return; }
+  if (!boards.length) return;
+  if (!dbReady) { paintBoard('<li class="empty">База недоступна</li>'); return; }
   const rows = await topScores();
-  boardEl.innerHTML = rows.length
+  paintBoard(rows.length
     ? rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="who">${escapeHtml(r.player)}</span><span class="pts">${r.score}</span></li>`).join('')
-    : `<li class="empty">${escapeHtml(t.emptyBoard)}</li>`;
+    : `<li class="empty">${escapeHtml(t.emptyBoard)}</li>`);
 }
 
 saveBtn?.addEventListener('click', async () => {

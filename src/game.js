@@ -667,6 +667,23 @@ export function action() {
   notify();
 }
 
+// Повернутись до стану «стоїмо на порожній сцені й чекаємо».
+// Потрібно кнопці «Нова гра» в меню: обнуляє очки, раунд і стопу.
+export function reset() {
+  if (game.phase === 'loading') return;   // картинки ще їдуть, чіпати нічого
+  game.score = 0;
+  game.round = 0;
+  game.lastMatch = 0;
+  game.lastPassed = false;
+  game.lastPoints = 0;
+  game.canEdit = false;
+  game.phase = 'idle';
+  if (dispX) { dispX.fill(0); dispY.fill(0); }
+  undoStack.length = 0;
+  needsWarp = true;
+  notify();
+}
+
 function updateTimers(now) {
   if (game.phase === 'intro') {
     game.canEdit = false;

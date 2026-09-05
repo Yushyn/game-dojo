@@ -31,9 +31,10 @@
 // Навмисно звичайний скрипт, а не модуль — щоб працював завжди,
 // навіть коли з модулями щось не так.
 var FILES = [
-  { path:'index.html',      mark:'id="stage"',       need:'нова розмітка з полотном stage' },
+  { path:'index.html',      mark:'data-screen',      need:'екрани: титул, меню, гра' },
+  { path:'src/screens.js',  mark:'showScreen',       need:'перемикач екранів' },
   { path:'src/config.js',   mark:'1920',             need:'розмір 1920×1080' },
-  { path:'src/tuning.js',   mark:'workResolution',   need:'блок image' },
+  { path:'src/tuning.js',   mark:'btnNewGame',       need:'блок screens' },
   { path:'src/game.js',     mark:'LIQUIFY',          need:'рушій Liquify' },
   { path:'src/main.js',     mark:'data-tool',        need:'кнопки інструментів' },
   { path:'src/db.js',       mark:'initDb',           need:'безпечне підключення бази' },
