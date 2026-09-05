@@ -617,21 +617,29 @@
 
   /* Повноекранний ролик при втраті життя. Картинку-заглушку малює
      саме полотно; сюди підставляється відео, коли воно зʼявиться. */
+  /* Ролик і затемнення — на ВЕСЬ екран, а не лише на ігрове поле.
+     Раніше вони жили всередині .play (1920×1080), і навколо
+     лишалась смуга широкого фону сцени — вона й читалась як
+     рамка навколо відео. */
   .life-anim {
-    position: absolute; inset: 0; z-index: 4;
+    position: fixed; inset: 0; z-index: 60;
     width: 100%; height: 100%; object-fit: contain;
-    background: #05040a;
+    background: #000;
+    opacity: 0; transition: opacity var(--life-fade, .45s) ease;
   }
+  .life-anim.on { opacity: 1; }
   .life-anim[hidden] { display: none; }
   /* Перехід у ролик втрати життя і назад — через чорноту.
      Тривалість задає --life-fade, її ставить src/main.js
      із tuning.js, щоб число було в одному місці. */
   .life-fade {
-    position: absolute; inset: 0; z-index: 40;
+    position: fixed; inset: 0; z-index: 61;
     background: #000; opacity: 0; pointer-events: none;
-    transition: opacity var(--life-fade, .35s) ease;
+    transition: opacity var(--life-fade, .45s) ease;
   }
   .life-fade.on { opacity: 1; }
+  /* Миттєво, без анімації — коли треба стати чорним непомітно */
+  .life-fade.instant { transition: none; }
 
 
   /* Восьмикутна кнопка. Одна й та сама картинка для хрестика

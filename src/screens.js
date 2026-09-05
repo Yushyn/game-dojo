@@ -463,14 +463,32 @@ function hook(key, el, src) {
   tryNext();
 }
 
+// Зупинка лупу відкладена: спершу він стихає, і аж потім
+// глушиться. Тому при поверненні в гру ЦЮ ВІДКЛАДЕНУ ЗУПИНКУ
+// обовʼязково треба скасувати. Без цього виходило так: вийшла
+// в меню й одразу повернулась — стара команда спрацьовувала вже
+// у грі й вимикала музику до кінця сесії.
+let loopStopTimer = 0;
+
 function gameMusicOn() {
   const M = musicConf();
+  clearTimeout(loopStopTimer);
+  loopStopTimer = 0;
+
+  // Браузер міг приспати звуковий канал — будимо.
+  if (audio && audio.state === 'suspended') audio.resume().catch(() => {});
+
   if (loopReady() && loopPlay()) { loopVolume(M.volume ?? 0.5, M.fadeSeconds ?? 1.5); return; }
   fadeIn('game');
 }
 
 function gameMusicOff() {
-  if (loopReady()) { loopVolume(0, 0.35); setTimeout(loopStop, 400); return; }
+  clearTimeout(loopStopTimer);
+  if (loopReady()) {
+    loopVolume(0, 0.35);
+    loopStopTimer = setTimeout(() => { loopStop(); loopStopTimer = 0; }, 400);
+    return;
+  }
   fadeOut('game');
 }
 
@@ -639,7 +657,8 @@ function trimEdges(buf) {
 }
 
 function loopPlay() {
-  if (!loopBuf || loopOn) return true;
+  if (!loopBuf) return false;
+  if (loopOn) return true;
   try {
     loopNode = audio.createBufferSource();
     loopNode.buffer = loopBuf;

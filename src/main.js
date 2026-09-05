@@ -250,14 +250,20 @@ soundEl?.addEventListener('error', () => {
     ' — перевір, чи лежить цей файл у assets/');
 });
 
-// Затемнення на вхід і вихід. Сцена спершу гасне, і вже з
-// чорноти проявляється ролик — без цього був різкий стик між
-// грою і відео.
+// Затемнення на вхід і вихід. Порядок такий:
+//   1. сцена гасне до чорного
+//   2. ролик стартує й чекає СВОГО ПЕРШОГО КАДРУ
+//   3. і аж тоді проявляється з чорноти
+// Крок 2 важливий: без нього бувало, що чорнота вже зійшла,
+// а відео ще не встигло намалюватись — і глядач бачив стрибок.
 const fadeEl = $('life-fade');
-const fadeMs = Math.round((TUNING.lives?.fadeSeconds ?? 0.35) * 1000);
+const fadeMs = Math.round((TUNING.lives?.fadeSeconds ?? 0.45) * 1000);
 let fadeTimer = 0;
 
-if (fadeEl) fadeEl.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
+if (fadeEl) {
+  fadeEl.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
+  animEl?.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
+}
 
 function showLifeAnim(on, idx) {
   if (!animEl || on === animPlaying) return;
@@ -268,28 +274,45 @@ function showLifeAnim(on, idx) {
   clearTimeout(fadeTimer);
 
   if (on) {
-    fadeEl?.classList.add('on');        // 1. сцена гасне
+    fadeEl?.classList.add('on');              // 1. сцена гасне
 
-    fadeTimer = setTimeout(() => {      // 2. коли стало чорно — пускаємо ролик
+    fadeTimer = setTimeout(() => {
       animEl.hidden = false;
       if (animEl.getAttribute('src') !== src) animEl.src = src;
       try { animEl.currentTime = 0; } catch (e) {}
       animEl.play().catch(() => {});
       playAnimSound(idx);
-      fadeEl?.classList.remove('on');   // 3. і проявляємо його з чорноти
+
+      // 2. чекаємо перший намальований кадр, але не довше 300 мс
+      let shown = false;
+      const reveal = () => {
+        if (shown) return;
+        shown = true;
+        animEl.classList.add('on');           // 3. ролик проявляється
+        fadeEl?.classList.remove('on');
+      };
+      animEl.addEventListener('playing', reveal, { once: true });
+      setTimeout(reveal, 300);
     }, fadeMs);
 
-    duckMusic(true);                    // музика не спиняється, лише стихає
+    duckMusic(true);                          // музика не спиняється, лише стихає
   } else {
-    // Обидва ролики закінчуються чорним кадром, тож затемнення
-    // вмикаємо одразу — на екрані нічого не смикнеться.
+    // Ролик закінчується чорним кадром, тому чорноту вмикаємо
+    // БЕЗ анімації — на екрані нічого не смикнеться. А вже з неї
+    // плавно проявляється гра.
+    fadeEl?.classList.add('instant');
     fadeEl?.classList.add('on');
+
+    animEl.classList.remove('on');
     animEl.hidden = true;
     animEl.pause();
     stopAnimSound();
     duckMusic(false);
 
-    fadeTimer = setTimeout(() => fadeEl?.classList.remove('on'), 30);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fadeEl?.classList.remove('instant');
+      fadeEl?.classList.remove('on');
+    }));
   }
 }
 
