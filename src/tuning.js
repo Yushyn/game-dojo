@@ -99,11 +99,11 @@ export const TUNING = {
   //             раунду. Пиши англійською, як і решта написів.
   boots: [
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
-      name: 'Leather Ankle Boot', passPercent: 78 },
+      name: 'Leather Ankle Boot', passPercent: 90 },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
-      name: 'Rubber Duck',        passPercent: 73 },
+      name: 'Rubber Duck',        passPercent: 85 },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
-      name: 'Trojan Horse',       passPercent: 35 },
+      name: 'Trojan Horse',       passPercent: 45 },
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
       name: 'Trail Sneaker',      passPercent: 79 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
@@ -174,7 +174,7 @@ export const TUNING = {
     dropShadow: {
       on:       true,
       alpha:    0.55,  // наскільки темна тінь у мить приземлення
-      width:    0.62,  // ширина відносно ширини стопи
+      width:    0.3,  // ширина відносно ширини стопи
       height:   0.055, // висота (тінь пласка, це еліпс)
       spread:   2.4,   // у скільки разів вона ширша, коли нога вгорі
     },
@@ -365,7 +365,7 @@ export const TUNING = {
     // ні для стопи, ні для чобота.
     cutAboveBoot: true,
     cutOffset:    0,     // зсув лінії, у частках висоти чобота (+ вниз)
-    showCutLine:  false, // показувати червону лінію на екрані
+    showCutLine:  true, // показувати червону лінію на екрані
     cutLineColor: 'rgba(255, 90, 90, 0.45)',
   },
 
@@ -392,7 +392,8 @@ export const TUNING = {
     // Якщо переекспортуєш аркуш — звір ці числа з новим файлом.
     // Вони в пікселях самої картинки, не екрана.
     loadingArt: {
-      // Одне ім'я або список: береться перше, за яким є файл.
+      // Одне ім'я або список: береться перше, за яким є файл.
+
       src:    ['assets/RedFeet.png', 'assets/loading-feet.png'],
       width:  101,   // розмір аркуша
       height: 440,
@@ -543,7 +544,8 @@ export const TUNING = {
     // червоним, а не синім, щоб не вибивався зі стилю.
     overlay:     '#b02a2a',
     good:        '#7ee787',
-    bad:         '#ff7a7a',
+    bad:         '#ff7a7a',
+
     dying:       '#c02020', // яким кольором заливається нога при втраті життя
     ink:         '#e8e6f0',
     dim:         '#8b869e',
