@@ -910,6 +910,10 @@
     </div>
 
     <video class="life-anim" id="life-anim" muted playsinline hidden></video>
+    <!-- Звук до ролика окремим каналом, а не всередині відео.
+         Так вимикач Sound глушить його разом із музикою, а якщо
+         браузер звук не пустить — ролик усе одно покажеться. -->
+    <audio id="life-sound" preload="auto"></audio>
 
     <!-- Питання перед виходом. Поки воно відкрите, таймер стоїть. -->
     <div class="ask" id="ask" hidden>
