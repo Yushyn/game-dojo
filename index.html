@@ -159,10 +159,9 @@
   /* ══ ГОЛОВНЕ МЕНЮ ════════════════════════════════════════════ */
   /* Права колона меню: лого, під ним три кнопки. */
   .menu-col {
-    position: absolute; right: 4.5%; top: 50%;
-    transform: translateY(-50%);
+    position: absolute; right: 4.5%; bottom: 6%;
     display: flex; flex-direction: column; align-items: center;
-    gap: 3.2%;
+    gap: 2.6vh;
   }
   .brand { display: block; }
   .brand img {
@@ -182,7 +181,7 @@
     --h: clamp(48px, 9vh, 96px);
     box-sizing: border-box;
     height: var(--h);
-    width: calc(var(--h) * 3.1);
+    width: calc(var(--h) * 3.9);   /* ширина кнопки. Тягнеться лише середина */
     display: flex; align-items: center; justify-content: center;
     border-style: solid;
     border-width: 0 calc(var(--h) * .7928);   /* 88 / 111 від висоти */
@@ -402,17 +401,18 @@
         <img id="s-logo" src="assets/logo.png" alt="Cinderhella — Fit or Die">
       </picture>
       <nav class="menu">
-        <button class="menu-item" data-go="game"        id="s-go-game">New game</button>
-        <button class="menu-item" data-go="leaderboard" id="s-go-board">Leaderboard</button>
+        <button class="menu-item" data-go="game"        id="s-go-game">New Game</button>
+        <button class="menu-item" data-go="leaderboard" id="s-go-board">Leaderboards</button>
         <button class="menu-item" data-go="credits"     id="s-go-credits">Credits</button>
       </nav>
-      <button class="mute" id="s-mute" aria-label="Звук">Звук: увімкнено</button>
+      <button class="mute" id="s-mute" aria-label="Sound">Звук: увімкнено</button>
     </div>
   </div>
 </section>
 
 <!-- Музика меню. Джерело підставляє src/screens.js. -->
 <audio id="s-music" loop preload="auto"></audio>
+<audio id="s-music-game" loop preload="none"></audio>
 
 <!-- ══ 4. ЛІДЕРБОРД ═════════════════════════════════════════════ -->
 <section class="screen screen-page" data-screen="leaderboard">

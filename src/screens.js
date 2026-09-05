@@ -37,7 +37,7 @@ export function showScreen(name) {
 
   current = name;
   toggleVideo(name);
-  if (isQuietScreen(name)) playMusic(); else stopMusic();
+  updateMusic(name);
   hooks.onShow?.(name);
 
   // Завантаження запускається рівно один раз, при першому заході.
@@ -194,69 +194,117 @@ function preloadButtons() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  МУЗИКА МЕНЮ
+//  МУЗИКА
+//  Два канали: один для меню, другий для самої гри. Обидва
+//  зациклені, обидва слухаються одного вимикача.
 // ══════════════════════════════════════════════════════════════
 
-let music = null, fadeTimer = 0, muted = false;
+// Якщо в tuning.js блоку music немає — беремо ці значення.
+// Так було не завжди: раніше без блоку музика мовчки зникала,
+// і зрозуміти чому було неможливо. Тепер вона грає в будь-якому разі.
+const MUSIC_FALLBACK = {
+  menu:        'assets/menu-music.mp3',
+  game:        'assets/game-music.mp3',
+  volume:      0.5,
+  fadeSeconds: 1.5,
+  showMute:    true,
+};
+
+const players = {};      // { menu: <audio>, game: <audio> }
+const fades   = {};      // таймери плавного наростання
+let muted = false;
 const MUTE_KEY = 'music-muted';
 
-function prepMusic() {
+function musicConf() {
   const M = S.music || {};
-  const el = $('s-music');
-  const btn = $('s-mute');
+  return {
+    ...MUSIC_FALLBACK,
+    ...M,
+    menu: M.menu || M.src || MUSIC_FALLBACK.menu,   // src — стара назва поля
+  };
+}
 
-  if (!el || !M.src) { btn?.remove(); return; }
-
-  music = el;
-  music.src = M.src;
-  music.volume = 0;
+function prepMusic() {
+  const M = musicConf();
   muted = localStorage.getItem(MUTE_KEY) === '1';
 
-  if (!btn || M.showMute === false) { btn?.remove(); return; }
+  hook('menu', $('s-music'), M.menu);
+  hook('game', $('s-music-game'), M.game);
+
+  const btn = $('s-mute');
+  if (!btn) return;
+  if (M.showMute === false || !players.menu) { btn.remove(); return; }
 
   paintMute(btn);
   btn.addEventListener('click', (e) => {
-    e.stopPropagation();          // щоб клік не пішов далі по меню
+    e.stopPropagation();               // клік не має йти далі по меню
     muted = !muted;
     localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
     paintMute(btn);
-    if (muted) stopMusic(); else if (isQuietScreen(current)) playMusic();
+    updateMusic(current);
   });
 }
 
+function hook(key, el, src) {
+  if (!el || !src) return;
+  el.src = src;
+  el.loop = true;
+  el.volume = 0;
+  players[key] = el;
+}
+
 function paintMute(btn) {
-  btn.textContent = muted ? S.muteOff : S.muteOn;
+  // Напис каже, що станеться від натиску, а не який стан зараз.
+  btn.textContent = muted
+    ? (S.muteOn  || 'Sound: turn on')
+    : (S.muteOff || 'Sound: turn off');
 }
 
-// Екрани, де музика доречна: усе, крім самої гри й перших двох.
-function isQuietScreen(name) {
-  return name === 'menu' || name === 'leaderboard' || name === 'credits';
+// Де яка музика доречна
+function trackFor(name) {
+  if (name === 'game') return 'game';
+  if (name === 'menu' || name === 'leaderboard' || name === 'credits') return 'menu';
+  return null;   // чорний екран і завантаження — тиша
 }
 
-function playMusic() {
-  const M = S.music || {};
-  if (!music || muted) return;
+function updateMusic(name) {
+  const want = muted ? null : trackFor(name);
+  Object.keys(players).forEach((key) => {
+    if (key === want) fadeIn(key); else fadeOut(key);
+  });
+}
 
-  const p = music.play();
+function fadeIn(key) {
+  const el = players[key];
+  if (!el) return;
+  const M = musicConf();
+
+  const p = el.play();
   if (p && p.catch) p.catch(() => {});   // браузер може відмовити — не біда
 
-  // плавно набираємо гучність, щоб не бити по вухах
-  clearInterval(fadeTimer);
+  clearInterval(fades[key]);
   const target = M.volume ?? 0.5;
   const steps = Math.max(1, Math.round((M.fadeSeconds ?? 1.5) * 20));
-  let i = 0;
-  fadeTimer = setInterval(() => {
+  let i = Math.round(el.volume / target * steps);   // якщо вже звучить — не з нуля
+  fades[key] = setInterval(() => {
     i++;
-    music.volume = Math.min(target, target * i / steps);
-    if (i >= steps) clearInterval(fadeTimer);
+    el.volume = Math.max(0, Math.min(target, target * i / steps));
+    if (i >= steps) clearInterval(fades[key]);
   }, 50);
 }
 
-function stopMusic() {
-  if (!music) return;
-  clearInterval(fadeTimer);
-  music.pause();
-  music.volume = 0;
+function fadeOut(key) {
+  const el = players[key];
+  if (!el || el.paused) return;
+  clearInterval(fades[key]);
+  const steps = 12;
+  let i = steps;
+  const from = el.volume;
+  fades[key] = setInterval(() => {
+    i--;
+    el.volume = Math.max(0, from * i / steps);
+    if (i <= 0) { clearInterval(fades[key]); el.pause(); }
+  }, 25);
 }
 
 // ── Кнопки ────────────────────────────────────────────────────

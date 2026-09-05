@@ -268,10 +268,30 @@ export const TUNING = {
       play:    true,   // false — лишиться нерухома заставка
     },
 
-    btnNewGame:     'Нова гра',
-    btnLeaderboard: 'Лідерборд',
-    btnCredits:     'Автори',
+    // Музика. Два канали: меню й сама гра, обидва зациклені.
+    // Заграти вони можуть лише після кліку на PRESS TO START —
+    // це вимога браузера, не наша примха.
+    // Якщо цей блок видалити, музика все одно гратиме: у screens.js
+    // є ті самі значення про запас.
+    music: {
+      menu:        'assets/menu-music.mp3',
+      game:        'assets/game-music.mp3',
+      volume:      0.5,   // 0..1
+      fadeSeconds: 1.5,   // за скільки плавно набирає гучність
+      showMute:    true,  // false — прибрати вимикач із меню
+    },
+
+    btnNewGame:     'New Game',
+    btnLeaderboard: 'Leaderboards',
+    btnCredits:     'Credits',
     btnBack:        'Назад',
+
+    // Логотип у меню. Два файли — легкий webp і png про запас.
+    logo: { webp: 'assets/logo.webp', png: 'assets/logo.png' },
+
+    // Напис на вимикачі каже, що станеться від натиску.
+    muteOn:  'Sound: turn on',    // видно, коли звук вимкнений
+    muteOff: 'Sound: turn off',   // видно, коли звук грає
 
     leaderboardTitle: 'Лідерборд',
     creditsTitle:     'Автори',
