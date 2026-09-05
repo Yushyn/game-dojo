@@ -29,9 +29,24 @@ import { TUNING } from './tuning.js';
 
 const T = TUNING;
 
-// Пензель: три розміри, перемикаються кнопками внизу екрана.
-const BRUSH_SIZES = (T.brush.sizes && T.brush.sizes.length) ? T.brush.sizes : [140, 240, 380];
-let brushIndex = Math.min(BRUSH_SIZES.length - 1, Math.max(0, T.brush.startIndex ?? 1));
+// ── Інструменти ───────────────────────────────────────────────
+// Три кнопки внизу екрана. У кожної свій діаметр пензля і своя
+// картинка — вона ж стає курсором, коли інструмент вибраний.
+const TOOLS = buildTools();
+const BRUSH_SIZES = TOOLS.map((t) => t.size);
+let brushIndex = startBrush();
+
+function buildTools() {
+  const B = T.brush || {};
+  if (B.tools && B.tools.length) return B.tools.map((t) => ({ ...t }));
+  // Старий запис, коли були самі числа без картинок
+  const sizes = (B.sizes && B.sizes.length) ? B.sizes : [140, 240, 380];
+  return sizes.map((size) => ({ size }));
+}
+
+function startBrush() {
+  return Math.min(TOOLS.length - 1, Math.max(0, T.brush.startIndex ?? 1));
+}
 
 // ── Полотно й буфери ──────────────────────────────────────────
 let canvas = null, ctx = null;
@@ -56,6 +71,7 @@ let girlNext = -1;       // який проявляється поверх нь�
 let girlSheet = null;    // спрайтшит: запасний варіант, якщо відео не пішло
 let girlT0 = 0;          // мить, коли її анімація почалась — для спрайтшита
 let girlCross = 0.5;     // за скільки секунд один ролик перетікає в наступний
+let toolIcons = [];      // картинки інструментів, по одній на кнопку
 let pedImage = null;     // окремий шар пʼєдестала поверх неї
 let baseBB = null;       // рамка НЕЗІМʼЯТОЇ стопи — за нею рахуємо розмір і місце
 
@@ -114,6 +130,7 @@ export function start(canvasEl, callbacks) {
       .catch((e) => console.warn('Фон не завантажився:', e.message));
   }
   if (T.girl?.show) loadGirl();
+  loadToolIcons();
   if (T.pedestal?.show) {
     loadImage(T.pedestal.src)
       .then((im) => { pedImage = im; })
@@ -142,6 +159,18 @@ export function start(canvasEl, callbacks) {
       });
     })
     .catch((e) => fail(e.message));
+}
+
+// Картинки інструментів. Не критичні: якщо файлу немає, курсор
+// просто лишиться кружечком, як був.
+function loadToolIcons() {
+  toolIcons = TOOLS.map(() => null);
+  TOOLS.forEach((tool, i) => {
+    if (!tool.icon) return;
+    loadImage(tool.icon)
+      .then((im) => { toolIcons[i] = im; })
+      .catch((e) => console.warn('Іконка інструмента не завантажилась:', e.message));
+  });
 }
 
 function loadImage(src) {
@@ -441,9 +470,9 @@ function strokeTo(bx, by) {
 
 function brushSize() { return BRUSH_SIZES[brushIndex]; }
 
-// Яка кнопка пензля зараз вибрана і які взагалі є розміри —
-// потрібно сторінці, щоб намалювати кружечки правильного розміру.
-export function brushOptions() { return BRUSH_SIZES.slice(); }
+// Що саме показувати на кнопках: розмір, картинку й назву.
+// Сторінка малює кнопки за цим списком, тому досить правити tuning.js.
+export function brushOptions() { return TOOLS.map((t) => ({ ...t })); }
 export function brushCurrent() { return brushIndex; }
 export function setBrush(i) {
   if (i < 0 || i >= BRUSH_SIZES.length) return;
@@ -583,6 +612,7 @@ function ensureWarp() { if (needsWarp) warp(); }
 function beginRound(i, again) {
   game.round = i;
   game.attempt = again ? game.attempt + 1 : 0;
+  brushIndex = startBrush();     // кожен раунд починається із середньої кисті
   dispX.fill(0); dispY.fill(0);
   undoStack.length = 0;
   needsWarp = true;
@@ -674,7 +704,6 @@ export function reset() {
   game.canEdit = false;
   game.attempt = 0;
   game.paused = false;
-  brushIndex = Math.min(BRUSH_SIZES.length - 1, Math.max(0, T.brush.startIndex ?? 1));
   if (dispX) { dispX.fill(0); dispY.fill(0); }
   undoStack.length = 0;
   needsWarp = true;
@@ -1161,8 +1190,27 @@ function drawBrush() {
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = T.colors.brushRing;
   ctx.beginPath(); ctx.arc(pointerX, pointerY, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = T.colors.brushRing;
-  ctx.beginPath(); ctx.arc(pointerX, pointerY, 2, 0, Math.PI * 2); ctx.fill();
+
+  // Всередині кола — картинка вибраного інструмента. Раніше там
+  // була просто крапка, і по ній не було видно, чим саме мнеш.
+  const icon = toolIcons[brushIndex];
+  if (!icon || !icon.width) {
+    ctx.fillStyle = T.colors.brushRing;
+    ctx.beginPath(); ctx.arc(pointerX, pointerY, 2, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+
+  // Висота іконки міряється від діаметра пензля: більший пензель —
+  // більший інструмент у руці. iconScale у tuning.js це масштабує.
+  const k = (TOOLS[brushIndex].iconScale ?? T.brush.iconScale ?? 1);
+  const h = brushSize() * k;
+  const w = h * (icon.width / icon.height);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+  ctx.shadowBlur = 18;
+  ctx.drawImage(icon, pointerX - w / 2, pointerY - h / 2, w, h);
+  ctx.restore();
 }
 
 // ══════════════════════════════════════════════════════════════

@@ -71,37 +71,51 @@ initScreens({
 });
 
 // ══════════════════════════════════════════════════════════════
-//  КНОПКИ РОЗМІРУ ПЕНЗЛЯ
-//  Три восьмикутники внизу екрана. Кружечок усередині малюється за
-//  справжнім діаметром пензля з tuning.js, лише зменшений так, щоб
-//  найбільший саме вміщався в кнопку. Тому кружечки завжди чесно
-//  показують співвідношення розмірів: змінила числа — змінились і вони.
+//  КНОПКИ ІНСТРУМЕНТІВ
+//  Три восьмикутники внизу екрана. Що на них намальовано і який
+//  діаметр пензля за кожним стоїть — усе в блоці `brush` у tuning.js.
+//  Сторінка нічого не вигадує: бере список інструментів і малює його.
 // ══════════════════════════════════════════════════════════════
 
-const BRUSH_LABELS = [t.brushSmall, t.brushMedium, t.brushBig];
 const brushBox = $('brushes');
 let brushButtons = [];
 
 function buildBrushes() {
   if (!brushBox) return;
-  const sizes = brushOptions();
-  const max = Math.max(...sizes);
+  const B = TUNING.brush;
+  const tools = brushOptions();
+  const max = Math.max(...tools.map((t) => t.size));
+  const mix = Math.max(0, Math.min(1, B.buttonSizeMix ?? 0.55));
+  const fit = B.buttonIconScale ?? 0.86;
 
   brushBox.innerHTML = '';
-  brushButtons = sizes.map((size, i) => {
+  brushButtons = tools.map((tool, i) => {
     const b = document.createElement('button');
     b.className = 'sq';
     b.type = 'button';
-    b.title = BRUSH_LABELS[i] || (size + ' px');
+    b.title = tool.name || (tool.size + ' px');
     b.setAttribute('aria-label', b.title);
 
-    // 62 — найбільший кружечок у пікселях макета, щоб лишились поля
-    const d = Math.max(10, Math.round(62 * size / max));
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.style.width  = 'calc(var(--u) * ' + d + ')';
-    dot.style.height = 'calc(var(--u) * ' + d + ')';
-    b.appendChild(dot);
+    // Картинка інструмента на кнопці. Її розмір ЧАСТКОВО йде за
+    // діаметром пензля: при mix = 1 різниця рівно пропорційна,
+    // при 0 всі три однакові. Так видно, що інструменти різні,
+    // але найменший не перетворюється на цятку.
+    const rel = tool.size / max;                 // 0..1
+    const k = fit * (1 - mix + mix * rel);       // частка від кнопки
+    const box = document.createElement('span');
+    box.className = 'tool';
+    box.style.width  = Math.round(k * 100) + '%';
+    box.style.height = Math.round(k * 100) + '%';
+
+    if (tool.icon) {
+      const im = document.createElement('img');
+      im.src = tool.icon;
+      im.alt = '';
+      box.appendChild(im);
+    } else {
+      box.classList.add('dot');                  // картинки немає — старий кружечок
+    }
+    b.appendChild(box);
 
     b.addEventListener('click', () => setBrush(i));
     brushBox.appendChild(b);

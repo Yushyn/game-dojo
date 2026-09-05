@@ -116,6 +116,17 @@ function buildFeet() {
   box.style.setProperty('--cycle', A.cycleSeconds + 's');
   box.innerHTML = '';
 
+  // Ім'я файлу може бути одне або кілька — так само, як у музики.
+  // Беремо перше, що справді відкрилось: аркуш зі слідами приходив
+  // від художника під різними назвами, і без цього екран
+  // завантаження мовчки лишався порожнім.
+  const names = [].concat(A.src || [], 'assets/loading-feet.png');
+  pickFile(names).then((src) => {
+    box.querySelectorAll('i').forEach((el) => {
+      el.style.backgroundImage = 'url("' + src + '")';
+    });
+  });
+
   const pause = A.cycleSeconds / A.count;   // затримка між кроками
 
   // Рахуємо знизу вгору: перший крок — найнижчий відбиток.
@@ -130,7 +141,6 @@ function buildFeet() {
     const pc = (v, whole) => (v / whole * 100).toFixed(3) + '%';
 
     const layer = document.createElement('i');
-    layer.style.backgroundImage = 'url("' + A.src + '")';
     // inset(зверху справа знизу зліва) — лишаємо видимим один відбиток
     layer.style.clipPath = 'inset(' + pc(yTop, A.height) + ' ' +
                                       pc(A.width - x2, A.width) + ' ' +
@@ -622,6 +632,16 @@ function runLoading() {
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+}
+
+// Перше ім'я зі списку, за яким справді є файл.
+// Якщо не відкрилось жодне — віддаємо останнє, щоб не ламати розмітку.
+function pickFile(list) {
+  const names = list.filter(Boolean);
+  return names.reduce(
+    (chain, name) => chain.then((found) => found || loadImage(name).then((ok) => (ok ? name : null))),
+    Promise.resolve(null)
+  ).then((found) => found || names[names.length - 1]);
 }
 
 function loadImage(src) {
