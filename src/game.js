@@ -54,7 +54,8 @@ let hooks = {};
 // ── Чоботи ────────────────────────────────────────────────────
 let boots = [];
 let bgImage = null;      // фон, якщо є
-let girlVideo = null;    // відео дівчинки — основний, найякісніший варіант
+let girlVideo = null;    // те з двох відео, яке зараз показуємо
+let girlSpare = null;    // друге, напоготові на початку — щоб цикл не спотикався
 let girlSheet = null;    // спрайтшит: запасний варіант, якщо відео не пішло
 let girlT0 = 0;          // мить, коли її анімація почалась — для спрайтшита
 let pedImage = null;     // окремий шар пʼєдестала поверх неї
@@ -686,7 +687,12 @@ export function reset() {
   // з меню). Саме тут відлік анімації дівчинки починається спочатку,
   // щоб гравець завжди бачив її з першого кадру, а не з середини циклу.
   girlT0 = performance.now();
-  if (girlVideo) { try { girlVideo.currentTime = 0; girlVideo.play(); } catch (e) {} }
+  if (girlVideo) {
+    try {
+      girlVideo.currentTime = 0; girlVideo.play();
+      if (girlSpare) { girlSpare.pause(); girlSpare.currentTime = 0; }
+    } catch (e) {}
+  }
 
   if (game.phase === 'loading') return;   // картинки ще їдуть, чіпати нічого
   game.score = 0;
@@ -812,28 +818,70 @@ function frame(now) {
 //  і замість дівчинки був би чорний прямокутник. У такому разі тихо
 //  переходимо на спрайтшит.
 
+//  Чому два відео, а не одне зациклене.
+//
+//  Вбудований loop у браузера — це справжнє перемотування: він зупиняє
+//  відтворення, перемотує на початок і запускає знову. Виміряно: на цій
+//  анімації пауза виходила 90–150 мс. Око читає її як ривок, і жодні
+//  правки самого відео тут не допоможуть — вміст ні до чого.
+//
+//  Тому тримаємо дві копії. Одна грає, друга стоїть на паузі рівно
+//  на нульовому кадрі, вже розкодована. Коли перша доходить до кінця,
+//  ми просто перемикаємось на другу — вона починає з місця, а не
+//  з перемотування. Та, що відпрацювала, тим часом сама готується
+//  до наступного разу: у неї на це є цілий цикл.
+
 function loadGirl() {
   const G = T.girl;
-  const v = document.createElement('video');
-  v.muted = true; v.loop = true; v.playsInline = true;
-  v.preload = 'auto'; v.autoplay = true;
-  v.src = G.video;
+  let ready = 0, failed = false;
 
-  v.addEventListener('error', () => {
-    console.warn('Відео дівчинки не пішло, беру спрайтшит');
-    useGirlSheet();
-  });
+  const make = () => {
+    const v = document.createElement('video');
+    v.muted = true; v.loop = false; v.playsInline = true;
+    v.preload = 'auto';
+    v.playbackRate = G.speed || 1;
+    v.addEventListener('error', () => {
+      if (failed) return;
+      failed = true;
+      console.warn('Відео дівчинки не пішло, беру спрайтшит');
+      useGirlSheet();
+    });
+    v.src = G.video;
+    return v;
+  };
 
-  v.addEventListener('loadeddata', () => {
-    if (!checkAlpha(v)) {
+  const a = make(), b = make();
+
+  const onReady = () => {
+    if (++ready < 2 || failed) return;
+    if (!checkAlpha(a)) {
+      failed = true;
       console.warn('Браузер не тягне прозорість у webm — беру спрайтшит');
       useGirlSheet();
       return;
     }
-    girlVideo = v;
-    v.playbackRate = G.speed || 1;
-    v.play().catch(() => {});
-  });
+    girlVideo = a;
+    girlSpare = b;
+    try { b.currentTime = 0; b.pause(); } catch (e) {}
+    a.play().catch(() => {});
+  };
+
+  a.addEventListener('loadeddata', onReady);
+  b.addEventListener('loadeddata', onReady);
+}
+
+// Перемикання на другу копію за мить до кінця першої
+function girlTick() {
+  const v = girlVideo, w = girlSpare;
+  if (!v || !w || !v.duration) return;
+
+  const lead = T.girl.switchLead ?? 0.02;
+  if (v.currentTime < v.duration - lead && !v.ended) return;
+
+  girlVideo = w;
+  girlSpare = v;
+  w.play().catch(() => {});
+  try { v.pause(); v.currentTime = 0; } catch (e) {}   // готуємо до наступного разу
 }
 
 // Чи справді видно прозорість: кут кадру має бути порожнім
@@ -878,6 +926,7 @@ function drawGirl(now) {
   if (!G || !G.show) return;
 
   if (girlVideo && girlVideo.readyState >= 2) {
+    girlTick();
     girlAspect = girlVideo.videoWidth / girlVideo.videoHeight;
     const b = girlBox();
     ctx.drawImage(girlVideo, b.x, b.y, b.w, b.h);
