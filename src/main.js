@@ -72,13 +72,17 @@ function render(s) {
 
   put('score', 'textContent', st.score);
   put('round', 'textContent', st.total ? (st.round + 1) + ' / ' + st.total : '—');
-  put('boot-name', 'textContent', st.phase === 'play' || st.phase === 'result' ? st.bootName : '—');
+  put('boot-name', 'textContent',
+      st.phase === 'intro' || st.phase === 'play' || st.phase === 'result' ? st.bootName : '—');
 
   const timerEl = $('timer');
   if (timerEl) {
     if (st.phase === 'play') {
       timerEl.textContent = Math.ceil(st.timeLeft) + ' с';
       timerEl.classList.toggle('warn', st.timeLeft <= 10);
+    } else if (st.phase === 'intro') {
+      timerEl.textContent = 'вступ';
+      timerEl.classList.remove('warn');
     } else {
       timerEl.textContent = '—';
       timerEl.classList.remove('warn');

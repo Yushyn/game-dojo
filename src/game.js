@@ -64,14 +64,17 @@ const game = {
   t0: 0,
   timeLeft: 0,
   previewLeft: 0,
+  introT: 0,
   canEdit: false,
   lastMatch: 0,
   lastPassed: false,
   lastPoints: 0,
 };
 let footBB = null;       // рамка видимої частини стопи, оновлюється при кожному збиранні
-let roundFrame = null;   // де лежить чобіт цього раунду — рахується раз і не змінюється
-let roundTarget = null;  // його силует на сітці порівняння
+let roundFrame = null;    // де лежить чобіт цього раунду — рахується раз і не змінюється
+let roundOutline = null;  // те саме для картинки контуру
+let roundTarget = null;   // силует чобота на сітці порівняння
+let roundCutY = 0;        // вище цієї лінії нога в підрахунок не йде
 
 // ── Курсор ────────────────────────────────────────────────────
 let pointerInside = false, pointerX = 0, pointerY = 0;
@@ -111,6 +114,18 @@ export function start(canvasEl, callbacks) {
       reportBaselines();
       game.phase = 'idle';
       notify();
+
+      // Контури не критичні: якщо якогось немає, крок вступу
+      // просто покаже кольоровий силует замість малюнка.
+      T.boots.forEach((def, i) => {
+        if (!def.outline) return;
+        loadImage(def.outline)
+          .then((im) => {
+            boots[i].outline = im;
+            boots[i].outlineBBox = bboxOfImage(im);
+          })
+          .catch((e) => console.warn('Контур не завантажився:', e.message));
+      });
     })
     .catch((e) => fail(e.message));
 }
@@ -130,9 +145,13 @@ function loadImage(src) {
 // зараховуватиметься тому, хто нічого не робив.
 function reportBaselines() {
   ensureWarp();
-  const base = footGrid();
-  const lines = boots.map((b) =>
-    `  ${b.name}: без жодного руху ${overlapPercent(base, bootGrid(b, frameFor(b))).toFixed(1)}%, поріг ${b.pass}%`);
+  const lines = boots.map((b) => {
+    const fr = frameFor(b);
+    roundCutY = cutLineFor(b, fr);
+    const v = overlapPercent(footGrid(), bootGrid(b, fr));
+    return `  ${b.name}: без жодного руху ${v.toFixed(1)}%, поріг ${b.pass}%`;
+  });
+  roundCutY = 0;
   console.log('Game Dojo — баланс порогів:\n' + lines.join('\n'));
 }
 
@@ -261,18 +280,45 @@ function bboxOf(mask, W, H) {
 // Куди саме лягає чобіт на початку раунду. Рахуємо ОДИН раз, поки
 // стопа ще не зім'ята, і далі не чіпаємо: інакше чобіт їздив би
 // за стопою, і гравцеві не було б до чого підлаштовуватись.
-function frameFor(boot) {
-  if (!footBB || !boot.bbox) return null;
+// Рамка картинки в пікселях самої картинки
+function bboxOfImage(img) {
+  const maxSide = 420;
+  const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const w = Math.max(2, Math.round(img.width * k));
+  const h = Math.max(2, Math.round(img.height * k));
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tc = tmp.getContext('2d', { willReadFrequently: true });
+  tc.drawImage(img, 0, 0, w, h);
+  const bb = bboxOf(maskFrom(tc.getImageData(0, 0, w, h).data, w, h), w, h);
+  if (!bb) return null;
+  const back = img.width / w;
+  return { cx: bb.cx * back, cy: bb.cy * back,
+           w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back };
+}
+
+function frameFor(boot, bbox) {
+  const bb = bbox || boot.bbox;
+  if (!footBB || !bb) return null;
 
   // Прикладаємо по ДОВЖИНІ стопи, а підошву чобота ставимо на ту саму
   // землю, що й підошву стопи. Раніше рівняли по більшій стороні — і чобіт
   // роздувався на всю ногу, бо стопа з гомілкою висока, а чобіт широкий.
-  const k = (footBB.w / boot.bbox.w) * boot.scale;
+  const k = (footBB.w / bb.w) * boot.scale;
   return {
     k,
-    dx: footBB.cx - boot.bbox.cx * k + boot.offsetX * footBB.w,
-    dy: (footBB.y1 + 1) - boot.bbox.bottom * k + boot.offsetY * footBB.h,
+    dx: footBB.cx - bb.cx * k + boot.offsetX * footBB.w,
+    dy: (footBB.y1 + 1) - bb.bottom * k + boot.offsetY * footBB.h,
   };
+}
+
+// Де проходить лінія відрізу: по верху халяви чобота.
+// Усе, що вище, у площу не зараховується — інакше довга гомілка
+// псувала б результат, хоча в чобіт вона все одно не влазить.
+function cutLineFor(boot, fr) {
+  if (!T.compare.cutAboveBoot || !fr || !boot.bbox) return 0;
+  const top = boot.bbox.bottom - boot.bbox.h;
+  return fr.dy + (top + T.compare.cutOffset * boot.bbox.h) * fr.k;
 }
 
 // Силует стопи на сітці, натягнутій на весь буфер.
@@ -282,6 +328,7 @@ function footGrid() {
   const out = new Uint8Array(G * G);
   for (let j = 0; j < G; j++) {
     const y = Math.min(srcH - 1, Math.floor((j + 0.5) / G * srcH));
+    if (y < roundCutY) continue;               // вище халяви не рахуємо
     for (let i = 0; i < G; i++) {
       const x = Math.min(srcW - 1, Math.floor((i + 0.5) / G * srcW));
       out[j * G + i] = outData[((y * srcW + x) << 2) + 3] >= 128 ? 1 : 0;
@@ -297,7 +344,9 @@ function bootGrid(boot, fr) {
   if (!fr) return out;
   const sx = boot.mw / boot.img.width, sy = boot.mh / boot.img.height;
   for (let j = 0; j < G; j++) {
-    const my = Math.round(((( j + 0.5) / G * srcH - fr.dy) / fr.k) * sy);
+    const fy = (j + 0.5) / G * srcH;
+    if (fy < roundCutY) continue;              // та сама лінія і для чобота
+    const my = Math.round(((fy - fr.dy) / fr.k) * sy);
     if (my < 0 || my >= boot.mh) continue;
     for (let i = 0; i < G; i++) {
       const mx = Math.round((((i + 0.5) / G * srcW - fr.dx) / fr.k) * sx);
@@ -555,11 +604,41 @@ function beginRound(i) {
   undoStack.length = 0;
   needsWarp = true;
   ensureWarp();                       // щоб рамка стопи була від НЕЗІМʼЯТОЇ стопи
-  roundFrame = frameFor(boots[i]);
-  roundTarget = bootGrid(boots[i], roundFrame);
+  const boot = boots[i];
+  roundFrame = frameFor(boot);
+  roundOutline = boot.outlineBBox ? frameFor(boot, boot.outlineBBox) : roundFrame;
+  roundCutY = cutLineFor(boot, roundFrame);
+  roundTarget = bootGrid(boot, roundFrame);
   game.t0 = performance.now();
-  game.phase = 'play';
+  game.introT = 0;
+  game.phase = 'intro';               // спершу вступ, робочий час почнеться після нього
   notify();
+}
+
+// Скільки триває вступ
+function introTotal() { return T.intro.bootSeconds + T.intro.outlineSeconds; }
+
+// Нога зʼявляється разом із контуром і плавно опускається на пʼєдестал.
+// Повертає зсув у пікселях полотна, або null якщо ноги ще немає на сцені.
+function footDrop() {
+  if (game.phase === 'idle') return null;
+  if (game.phase !== 'intro') return 0;
+
+  const I = T.intro;
+  const t = game.introT - I.bootSeconds;
+  if (t < 0) return null;
+  if (I.footDropSeconds <= 0) return 0;
+
+  const k = Math.min(1, t / I.footDropSeconds);
+  const eased = 1 - Math.pow(1 - k, 3);      // швидко зрушує, мʼяко гальмує
+  return -(1 - eased) * GAME.height * I.footDropFrom;
+}
+
+// Мʼяке проявлення на початку кроку і згасання в кінці
+function stepAlpha(t, len) {
+  const f = T.intro.fadeSeconds;
+  if (f <= 0) return 1;
+  return Math.max(0, Math.min(1, Math.min(t / f, (len - t) / f)));
 }
 
 function finishRound() {
@@ -589,6 +668,15 @@ export function action() {
 }
 
 function updateTimers(now) {
+  if (game.phase === 'intro') {
+    game.canEdit = false;
+    game.introT = (now - game.t0) / 1000;
+    if (game.introT >= introTotal()) {
+      game.phase = 'play';
+      game.t0 = now;                  // робочий час стартує тільки тепер
+    }
+    return;
+  }
   if (game.phase !== 'play') { game.canEdit = false; return; }
   const R = T.round;
   const el = (now - game.t0) / 1000;
@@ -618,6 +706,7 @@ export function getState() {
     bootName: boots[game.round]?.name || '',
     timeLeft: game.timeLeft,
     previewLeft: game.previewLeft,
+    introT: game.introT,
     bootVisible: game.phase === 'play' && game.previewLeft > 0,
     match: game.lastMatch,
     passed: game.lastPassed,
@@ -645,10 +734,16 @@ function frame(now) {
   if (game.phase === 'loading') return drawCentered('Завантаження…', T.colors.dim, 30);
 
   ensureWarp();
-  drawShadow();
-  ctx.drawImage(buf, imgX, imgY, srcW * imgScale, srcH * imgScale);
 
-  if (T.anchor.show && game.phase !== 'done') drawAnchor();
+  const drop = footDrop();
+  if (drop !== null) {
+    drawShadow(drop);
+    ctx.drawImage(buf, imgX, imgY + drop, srcW * imgScale, srcH * imgScale);
+  }
+
+  if (T.compare.showCutLine && (game.phase === 'play' || game.phase === 'result')) drawCutLine();
+  if (T.anchor.show && (game.phase === 'play' || game.phase === 'result')) drawAnchor();
+  if (game.phase === 'intro') drawIntro();
   if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
   if (game.phase === 'result') drawResult();
   if (game.phase === 'idle') drawIdle();
@@ -663,11 +758,11 @@ function frame(now) {
 }
 
 // Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
-function drawShadow() {
+function drawShadow(offsetY) {
   const I = T.image;
   if (!I.shadow || !footBB) return;
   const cx = imgX + footBB.cx * imgScale;
-  const cy = imgY + (footBB.y1 + 1) * imgScale;
+  const cy = imgY + (offsetY || 0) + (footBB.y1 + 1) * imgScale;
   const rx = footBB.w * imgScale * I.shadowWidth;
   const ry = footBB.h * imgScale * I.shadowHeight;
 
@@ -715,6 +810,22 @@ function drawFail() {
   text('Подробиці: F12 → вкладка Console', GAME.width / 2, GAME.height / 2 + 80, T.colors.dim, 24, 'center');
 }
 
+// Тонка лінія, щоб гравець бачив, звідки площа вже не рахується
+function drawCutLine() {
+  if (!roundCutY) return;
+  const y = imgY + roundCutY * imgScale;
+  ctx.save();
+  ctx.strokeStyle = T.compare.cutLineColor;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([14, 10]);
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(GAME.width, y);
+  ctx.stroke();
+  ctx.restore();
+  text('вище не рахується', GAME.width - 40, y - 18, T.compare.cutLineColor, 20, 'right');
+}
+
 function drawAnchor() {
   const x = imgX + anchor.x * srcW * imgScale;
   const y = imgY + anchor.y * srcH * imgScale;
@@ -735,19 +846,37 @@ function drawAnchor() {
 
 // Кладемо чобіт просто на стопу: обидві форми вписані в один квадрат,
 // рівно так само, як їх потім порівнює підрахунок.
-function drawBootOnFoot(picture, boot, alpha) {
-  const fr = roundFrame;
-  if (!fr || alpha <= 0.001) return;
+function drawBootOnFoot(picture, frame, alpha) {
+  if (!picture || !frame || alpha <= 0.001) return;
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = Math.min(1, alpha);
   ctx.drawImage(picture,
-    imgX + fr.dx * imgScale, imgY + fr.dy * imgScale,
-    boot.img.width * fr.k * imgScale, boot.img.height * fr.k * imgScale);
+    imgX + frame.dx * imgScale, imgY + frame.dy * imgScale,
+    picture.width * frame.k * imgScale, picture.height * frame.k * imgScale);
   ctx.restore();
 }
 
 // Місце праворуч, де пишемо результат раунду
 function sideX() { return GAME.width * 0.84; }
+
+function drawIntro() {
+  const I = T.intro, boot = boots[game.round], t = game.introT;
+
+  if (t < I.bootSeconds) {
+    drawBootOnFoot(boot.img, roundFrame, stepAlpha(t, I.bootSeconds) * I.bootAlpha);
+  } else {
+    const t2 = t - I.bootSeconds;
+    const a = stepAlpha(t2, I.outlineSeconds) * I.outlineAlpha;
+    if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, a);
+    else drawBootOnFoot(boot.shape, roundFrame, a * 0.7);
+  }
+
+  textShade(0, 150);
+  text('Раунд ' + (game.round + 1) + ' / ' + boots.length, 40, 44, T.colors.dim, 24);
+  text(boot.name, 40, 78, T.colors.dim, 22);
+  text(t < I.bootSeconds ? T.texts.introBoot : T.texts.introOutline,
+       GAME.width / 2, 56, T.colors.ink, 30, 'center', 'bold');
+}
 
 function drawBootPreview() {
   const P = T.preview, R = T.round;
@@ -759,7 +888,7 @@ function drawBootPreview() {
   if (P.fadeOutSeconds > 0) a = Math.min(a, game.previewLeft / P.fadeOutSeconds);
   a = Math.max(0, Math.min(1, a)) * P.alpha;
 
-  drawBootOnFoot(boots[game.round].img, boots[game.round], a);
+  drawBootOnFoot(boots[game.round].img, roundFrame, a);
 }
 
 function drawPlayHud() {
@@ -794,7 +923,10 @@ function drawDone() {
 // Чобіт лягає поверх стопи: обидва вписані в один квадрат
 function drawResult() {
   const boot = boots[game.round];
-  drawBootOnFoot(boot.shape, boot, T.preview.resultAlpha);
+  // У кінці кладемо той самий контур, що показували у вступі.
+  // Синій силует лишається запасним варіантом для чобіт без контуру.
+  if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, T.preview.resultAlpha);
+  else drawBootOnFoot(boot.shape, roundFrame, T.preview.resultAlpha);
 
   const x = sideX(), y = GAME.height * 0.30;
   const col = game.lastPassed ? T.colors.good : T.colors.bad;
