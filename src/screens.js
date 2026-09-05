@@ -61,6 +61,7 @@ export function initScreens(callbacks) {
   buildFeet();
   prepMusic();
   prepFullscreen();
+  prepHowto();
   preloadButtons();
   bindButtons();
 
@@ -226,6 +227,24 @@ function toggleFullscreen() {
   }
 }
 
+// ── Інструкція для iPhone ─────────────────────────────────────
+function openHowto(open) {
+  const box = $('howto');
+  if (!box) return;
+  box.hidden = !open;
+  if (open) $('s-howto-close')?.focus({ preventScroll: true });
+}
+
+function prepHowto() {
+  $('s-howto-close')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openHowto(false);
+  });
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('howto')?.hidden) openHowto(false);
+  });
+}
+
 // Гра запущена з домашнього екрана — панелей браузера вже немає.
 function isStandalone() {
   return window.navigator.standalone === true ||
@@ -246,7 +265,7 @@ function prepFullscreen() {
   // Натомість підказуємо єдиний спосіб, який там справді працює.
   if (!ask) {
     btn.textContent = S.homescreenHint || 'Add to Home Screen for fullscreen';
-    btn.style.cursor = 'default';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openHowto(true); });
     return;
   }
 

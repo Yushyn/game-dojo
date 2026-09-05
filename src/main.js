@@ -238,11 +238,18 @@ function paintBoard(html) { boards.forEach((el) => { el.innerHTML = html; }); }
 
 async function refreshBoard() {
   if (!boards.length) return;
-  if (!dbReady) { paintBoard('<li class="empty">База недоступна</li>'); return; }
+  if (!dbReady) { paintBoard('<li class="lb-empty">База недоступна</li>'); return; }
   const rows = await topScores();
+  // Значки місця є лише для перших трьох — далі просто номер.
   paintBoard(rows.length
-    ? rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="who">${escapeHtml(r.player)}</span><span class="pts">${r.score}</span></li>`).join('')
-    : `<li class="empty">${escapeHtml(t.emptyBoard)}</li>`);
+    ? rows.map((r, i) => {
+        const place = i + 1;
+        const badge = place <= 3 ? ' lb-p' + place : '';
+        return `<li class="lb-row"><i class="lb-badge${badge}">${place}</i>` +
+               `<span class="who">${escapeHtml(r.player)}</span>` +
+               `<span class="pts">${r.score}</span></li>`;
+      }).join('')
+    : `<li class="lb-empty">${escapeHtml(t.emptyBoard)}</li>`);
 }
 
 saveBtn?.addEventListener('click', async () => {

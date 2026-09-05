@@ -239,6 +239,44 @@
 
   .tiny-row { display: flex; gap: calc(var(--u) * 24); }
 
+  /* Інструкція «як зробити повний екран на айфоні» */
+  #howto[hidden] { display: none; }
+  #howto {
+    position: fixed; inset: 0; z-index: 95;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(3, 2, 6, .88); padding: 5vh 6vw;
+  }
+  .howto-box {
+    max-width: 520px; width: 100%;
+    border: 1px solid rgba(216,171,99,.4);
+    background: #100a12; padding: 26px 28px;
+    max-height: 90dvh; overflow-y: auto;
+  }
+  .howto-box h2 {
+    font-family: var(--display); font-weight: 400;
+    font-size: 22px; letter-spacing: .1em; color: var(--candle-lit);
+    margin: 0 0 14px; text-transform: none;
+  }
+  .howto-lead, .howto-note {
+    font-family: var(--prose); font-size: 17px; color: var(--ash);
+    margin: 0 0 16px; font-style: italic;
+  }
+  .howto-note { margin: 16px 0 0; font-size: 15px; }
+  .howto-steps {
+    font-family: var(--prose); font-size: 18px; color: var(--bone);
+    margin: 0; padding-left: 1.2em; line-height: 1.7;
+  }
+  .howto-steps b { color: var(--candle-lit); font-weight: 500; }
+  .howto-close {
+    all: unset; cursor: pointer; display: block; margin: 22px 0 0;
+    font-family: var(--prose); font-size: 17px; letter-spacing: .1em;
+    color: var(--bone); border: 1px solid rgba(216,171,99,.45);
+    padding: 10px 26px; text-align: center;
+  }
+  .howto-close:hover, .howto-close:focus-visible {
+    color: var(--candle-lit); border-color: var(--candle);
+  }
+
   /* Службові написи — навмисно тихі, щоб не сперечались із кнопками */
   .mute {
     all: unset; cursor: pointer;
@@ -249,7 +287,113 @@
   }
   .mute:hover, .mute:focus-visible { color: var(--candle-lit); }
 
-  /* ══ СТОРІНКИ (лідерборд, автори) ════════════════════════════ */
+
+  /* ══ ЛІДЕРБОРД ═══════════════════════════════════════════════
+     Рядок — картинка художника, розтягнута за правилом 84|100|30:
+     ліва сходинка й правий край лишаються як намальовані,
+     тягнеться тільки середина. Значок місця лягає зверху на ту
+     саму ліву сходинку — вона під нього й намальована.
+     Один розмір --rh керує всім: висотою рядка, значком, шрифтом. */
+  .lb {
+    position: absolute; right: 3%; top: 0; bottom: 0;
+    width: min(54%, 660px);
+    display: flex; flex-direction: column;
+    padding: 3.5vh 0 4vh;
+    --rh: clamp(34px, 6.4vh, 62px);
+  }
+  /* мʼяке затемнення під колоною, щоб написи не тонули в сцені */
+  .lb::before {
+    content: ''; position: absolute; inset: -2% -6% -2% -10%;
+    background: linear-gradient(to left, rgba(7,6,11,.72) 55%, rgba(7,6,11,0));
+    pointer-events: none;
+  }
+  .lb > * { position: relative; }
+
+  .lb-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 2vh; padding-left: 2px;
+  }
+  .lb-title {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(22px, 4.4vh, 46px);
+    letter-spacing: .04em; color: var(--candle-lit);
+    margin: 0; text-transform: none;
+    text-shadow: 0 3px 18px rgba(0,0,0,.9);
+  }
+  .lb-close {
+    all: unset; cursor: pointer; flex: none;
+    width: calc(var(--rh) * .92); height: calc(var(--rh) * .92);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--candle-lit);
+    background: rgba(10,8,14,.55);
+    border: 2px solid rgba(216,171,99,.7);
+    /* восьмикутник — та сама форма, що й у значків місця */
+    clip-path: polygon(18% 0, 82% 0, 100% 18%, 100% 82%, 82% 100%,
+                       18% 100%, 0 82%, 0 18%);
+    transition: color .2s, background .2s;
+  }
+  .lb-close svg { width: 55%; height: 55%; }
+  .lb-close:hover, .lb-close:focus-visible { color: #fff; background: rgba(216,171,99,.22); }
+
+  .lb-list {
+    list-style: none; margin: 0; padding: 0 4px 0 0;
+    display: flex; flex-direction: column; gap: calc(var(--rh) * .16);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .lb-list::-webkit-scrollbar { width: 4px; }
+  .lb-list::-webkit-scrollbar-thumb { background: rgba(216,171,99,.35); }
+
+  .lb-row {
+    position: relative; flex: none;
+    height: var(--rh);
+    display: flex; align-items: center; gap: 12px;
+    box-sizing: border-box;
+    border-style: solid;
+    border-width: 0 calc(var(--rh) * .375) 0 calc(var(--rh) * 1.05);  /* 30 і 84 від 80 */
+    border-image-source: url('assets/lb-row.png');
+    border-image-slice: 0 30 0 84 fill;
+    border-image-repeat: stretch;
+    font-family: var(--prose);
+    font-size: calc(var(--rh) * .42);
+    color: var(--bone);
+  }
+  .lb-row .who { flex: 1; padding-left: calc(var(--rh) * .1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-row .pts { color: var(--candle-lit); font-variant-numeric: tabular-nums; }
+
+  /* Значок місця. Картинка — тільки рамка, тому темну заливку
+     робимо самі й обрізаємо тією ж восьмикутною формою. */
+  .lb-badge {
+    /* left рахується від ВНУТРІШНЬОГО краю рамки, а рамка тут —
+       та сама ліва сходинка завширшки 1.05 висоти. Тому зсуваємо
+       значок назад рівно на неї: він має лежати НА сходинці. */
+    position: absolute; top: 0; left: calc(var(--rh) * -1.05);
+    width: var(--rh); height: var(--rh);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--display); font-style: normal;
+    font-size: calc(var(--rh) * .44);
+    color: #cfc7b8;
+  }
+  .lb-badge::after {
+    content: ''; position: absolute; inset: 0;
+    background: center / contain no-repeat;
+  }
+  .lb-p1::after { background-image: url('assets/place-1.png'); }
+  .lb-p2::after { background-image: url('assets/place-2.png'); }
+  .lb-p3::after { background-image: url('assets/place-3.png'); }
+  .lb-p1 { color: #f4dfb4; }
+  .lb-p2 { color: #dcdce2; }
+  .lb-p3 { color: #dda76d; }
+
+  .lb-empty {
+    font-family: var(--prose); font-style: italic; font-size: 19px;
+    color: var(--ash); padding: 18px 4px;
+  }
+
+  @media (max-height: 560px) {
+    .lb { width: min(62%, 560px); padding: 2vh 0; }
+  }
+
+  /* ══ СТОРІНКИ (автори) ════════════════════════════ */
   .page {
     position: absolute; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -557,6 +701,24 @@
   <p id="s-rotate-text" style="margin:0">Rotate your device</p>
 </div>
 
+<!-- Інструкція для iPhone та iPad. Відкривається з підказки в меню. -->
+<div id="howto" hidden>
+  <div class="howto-box">
+    <h2>Fullscreen on iPhone</h2>
+    <p class="howto-lead">Safari не вміє розгортати сторінки на весь екран.
+       Але вміє запускати гру як застосунок — без адресного рядка й кнопок.</p>
+    <ol class="howto-steps">
+      <li>Натисни <b>Поділитись</b> — квадрат зі стрілкою вгору, вгорі екрана</li>
+      <li>Гортай список донизу до <b>«На екран Home»</b></li>
+      <li>Натисни <b>«Додати»</b></li>
+      <li>Запускай гру з іконки на робочому столі</li>
+    </ol>
+    <p class="howto-note">Зробити це треба один раз. На Android і на компʼютері
+       повний екран вмикається сам.</p>
+    <button class="howto-close" id="s-howto-close">Зрозуміло</button>
+  </div>
+</div>
+
 <audio id="s-music" loop preload="auto"></audio>
 <audio id="s-music-game" loop preload="auto"></audio>
 <!-- Грім. Не зациклений: його щоразу перезапускає відео меню,
@@ -566,14 +728,20 @@
 <!-- ══ 4. ЛІДЕРБОРД ═════════════════════════════════════════════ -->
 <section class="screen screen-page" data-screen="leaderboard">
   <div class="frame frame-art" data-art>
-    <div class="veil"></div>
-    <div class="page">
-      <h2 class="page-title" id="s-board-title">Лідерборд</h2>
-      <div class="page-body">
-        <ol class="board-big" id="board-full"><li class="empty">Завантаження…</li></ol>
+    <!-- Колона праворуч, як на макеті. Затемнення тільки під нею:
+         сцена ліворуч має лишатись видимою. -->
+    <div class="lb">
+      <div class="lb-head">
+        <h2 class="lb-title" id="s-board-title">Leaderboard</h2>
+        <button class="lb-close" data-go="menu" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" fill="none"/>
+          </svg>
+        </button>
       </div>
+      <ol class="lb-list" id="board-full"><li class="lb-empty">Завантаження…</li></ol>
     </div>
-    <button class="back" data-go="menu">Назад</button>
   </div>
 </section>
 

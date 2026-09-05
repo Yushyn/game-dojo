@@ -318,7 +318,7 @@ export const TUNING = {
     muteOn:  'Sound: turn on',    // видно, коли звук вимкнений
     muteOff: 'Sound: turn off',   // видно, коли звук грає
 
-    leaderboardTitle: 'Лідерборд',
+    leaderboardTitle: 'Leaderboard',
     creditsTitle:     'Автори',
 
     // Впиши сюди справжні імена. Груп може бути скільки завгодно,
