@@ -703,15 +703,33 @@
 
   /* Повноекранний ролик при втраті життя. Картинку-заглушку малює
      саме полотно; сюди підставляється відео, коли воно зʼявиться. */
-  life-anim {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100dvh;
-    z-index: 999;
-    object-fit: cover; /* Розтягує відео на увесь екран пристрою без чорних смуг */
+  /* Повноекранний ролик при втраті життя / перемозі */
+  .life-anim {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    z-index: 100 !important;
+    object-fit: cover !important;
     background: #05040a;
   }
+  .life-anim[hidden] {
+    display: none !important;
+  }
+  .life-fade {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    z-index: 101 !important;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--life-fade, .35s) ease;
+  }
+  .life-fade.on { opacity: 1; }
   .life-anim[hidden] { display: none; }
   /* Перехід у ролик втрати життя і назад — через чорноту.
      Тривалість задає --life-fade, її ставить src/main.js
