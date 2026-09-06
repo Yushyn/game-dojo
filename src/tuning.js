@@ -269,7 +269,7 @@ export const TUNING = {
     { src: 'assets/boot13.png', outline: 'assets/boot13-outline.png',
       name: 'Clown',      passPercent: 70, cutOffset: 0 },
     { src: 'assets/boot14.png', outline: 'assets/boot14-outline.png',
-      name: 'Are you sure?',      passPercent: 90, cutOffset: 0 },
+      name: 'Are you sure?',      passPercent: 75, cutOffset: 0 },
   ],
 
   // ── ДЕ МОЖЕ СТОЯТИ ЧОБІТ ─────────────────────────────────────
