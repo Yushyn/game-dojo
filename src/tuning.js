@@ -519,7 +519,7 @@ export const TUNING = {
     loadingMaxSeconds: 15,
 
     // Звук для кліку будь-якої кнопки інтерфейсу (UX)
-    buttonClickSound: 'assets/2026-03-08 11.23.01.mp3',
+    buttonClickSound: 'assets/button-click.mp3',
     buttonClickVolume: 0.8,
 
     loadingArt: {

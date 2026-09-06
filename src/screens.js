@@ -27,7 +27,6 @@ function prepButtonClickSound() {
 
   // Універсальний слухач для всіх кнопок на сторінці
   document.addEventListener('click', (e) => {
-    if (isMuted()) return;
     const btn = e.target.closest('button, .menu-item, .sq, .lb-close, .back, .mute');
     if (btn) {
       playButtonClickSound();
@@ -36,11 +35,22 @@ function prepButtonClickSound() {
 }
 
 export function playButtonClickSound() {
-  if (!buttonClickAudio || isMuted()) return;
+  if (isMuted()) return;
+  
+  // Якщо об'єкт звуку ще не створено або файл міняється
+  if (!buttonClickAudio && S.buttonClickSound) {
+    buttonClickAudio = new Audio(S.buttonClickSound);
+  }
+  
+  if (!buttonClickAudio) return;
+
   try {
-    buttonClickAudio.currentTime = 0;
-    buttonClickAudio.volume = S.buttonClickVolume ?? 0.8;
-    buttonClickAudio.play().catch(() => {});
+    // Клонуємо або скидаємо трек, щоб звук можна було швидко просклонувати/перезапустити
+    const sound = buttonClickAudio.cloneNode();
+    sound.volume = S.buttonClickVolume ?? 0.8;
+    sound.play().catch((err) => {
+      console.warn('Не вдалося відтворити звук кнопки:', err);
+    });
   } catch (e) {}
 }
 
