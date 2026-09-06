@@ -158,11 +158,8 @@ function buildBrushes() {
 let liftBtn = null;
 
 function buildLift() {
-  // Якщо блока lift у tuning.js немає — беремо усталені значення,
-  // а не мовчки ховаємо кнопку. Інакше досить забути замінити
-  // tuning.js, і кнопки просто не буде, без жодної підказки.
-  const L = TUNING.brush?.lift || {};
-  if (!brushBox || L.on === false) { liftBtn = null; return; }
+  const L = TUNING.brush?.lift;
+  if (!brushBox || !L || L.on === false) { liftBtn = null; return; }
 
   const b = document.createElement('button');
   b.className = 'sq';
