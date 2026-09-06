@@ -152,6 +152,18 @@ buildBrushes();
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
+  ...
+```[cite: 4]
+
+**Замініть весь обробник `keydown` на цей код:**
+
+```javascript
+// Змінна для збереження введеного тексту-чіту
+let cheatBuffer = '';
+
+addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
+  if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
 
   // Поки відкрите питання про вихід — Esc відповідає «ні»,
   // а решта клавіш нічого не робить.
@@ -164,6 +176,44 @@ addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   const n = Number(e.key);
   if (n >= 1 && n <= brushButtons.length) setBrush(n - 1);
+
+  // ── ЧІТ-КОД: перевірка введення назви чобота ─────────────────
+  const st = getState();
+  if (st.phase === 'play' && e.key.length === 1) {
+    // Накопичуємо тільки літери та цифри, ігноруємо пробіли
+    if (e.key !== ' ') {
+      cheatBuffer += e.key.toLowerCase();
+    }
+
+    // Очищаємо назву чобота від пробілів для порівняння
+    const targetName = (st.bootName || '').replace(/\s+/g, '').toLowerCase();
+
+    // Якщо введений буфер містить у собі назву чобота
+    if (targetName && cheatBuffer.includes(targetName)) {
+      cheatBuffer = ''; // Скидаємо буфер
+      
+      // Симулюємо 100% перемогу в цьому раунді
+      game.lastMatch = 100;
+      game.lastOutside = 0;
+      game.lastPassed = true;
+      
+      const R = TUNING.round;
+      const full = R.pointsForFullMatch ?? 1000;
+      game.lastPoints = full;
+      game.score += game.lastPoints;
+
+      game.phase = 'result';
+      game.resultT0 = performance.now();
+      game.canEdit = false;
+      
+      render();
+    }
+
+    // Обмежуємо довжину буфера, щоб він не розростався безкінечно
+    if (cheatBuffer.length > 50) {
+      cheatBuffer = cheatBuffer.slice(-25);
+    }
+  }
 });
 
 // ══════════════════════════════════════════════════════════════
