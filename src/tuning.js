@@ -229,9 +229,9 @@ export const TUNING = {
     { src: 'assets/boot4.png', outline: 'assets/boot4-outline.png',
       name: 'Tutorial from Plarium',      passPercent: 60, cutOffset: 0 },
     { src: 'assets/boot5.png', outline: 'assets/boot5-outline.png',
-      name: 'Hell at Night',    passPercent: 65, cutOffset: 0.17 },
+      name: 'Hell at Night',    passPercent: 60, cutOffset: 0.17 },
     { src: 'assets/boot6.png', outline: 'assets/boot6-outline.png',
-      name: 'Hey-Ha',     passPercent: 70, cutOffset: 0 },
+      name: 'Hey-Ha',     passPercent: 60, cutOffset: 0 },
 
     // ── Нові чоботи ──────────────────────────────────────────
     // Назви можна міняти прямо тут — гравець бачить саме їх
@@ -240,7 +240,7 @@ export const TUNING = {
     // У крилатого це права частина (ліворуч крило), у фламінго —
     // усе, крім шиї з головою у правому верхньому куті.
     { src: 'assets/boot7.png', outline: 'assets/boot7-outline.png',
-      name: 'Fly to Heaven',        passPercent: 70, cutOffset: 0, offsetX: -0.15,
+      name: 'Fly to Heaven',        passPercent: 65, cutOffset: 0, offsetX: -0.15,
       fitBox: { left: 0.44, top: 0.03 },
       // Крило високе, і спільна рамка тиснула чобіт до 60%.
       // Своя зона піднімає стелю майже під смужку часу.
@@ -254,7 +254,7 @@ export const TUNING = {
       // краще крупний чобіт, а перекриття не заважає.
       scale: 0.86 },
     { src: 'assets/boot9.png', outline: 'assets/boot9-outline.png',
-      name: 'Cthulhu',       passPercent: 65, cutOffset: 0 },
+      name: 'Cthulhu',       passPercent: 60, cutOffset: 0 },
     // УВАГА: шкарпетка — це фактично форма самої стопи, тому
     // недоторкана нога вже дає 97.5% збігу. Раунд «на не зіпсуй»:
     // поріг 98 означає, що виграє той, хто майже нічого не чіпав.
@@ -263,9 +263,9 @@ export const TUNING = {
     { src: 'assets/boot10.png', outline: 'assets/boot10-outline.png',
       name: 'sOck',         passPercent: 95, cutOffset: 0 },
     { src: 'assets/boot11.png', outline: 'assets/boot11-outline.png',
-      name: 'Do not Fall',       passPercent: 65, cutOffset: 0, offsetX: -0.16},
+      name: 'Do not Fall',       passPercent: 60, cutOffset: 0, offsetX: -0.16},
     { src: 'assets/boot12.png', outline: 'assets/boot12-outline.png',
-      name: 'Leshun',     passPercent: 70, cutOffset: 0, offsetX: -0.15},
+      name: 'Leshun',     passPercent: 65, cutOffset: 0, offsetX: -0.15},
     { src: 'assets/boot13.png', outline: 'assets/boot13-outline.png',
       name: 'Clown',      passPercent: 70, cutOffset: 0 },
     { src: 'assets/boot14.png', outline: 'assets/boot14-outline.png',
