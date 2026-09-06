@@ -220,7 +220,7 @@ export const TUNING = {
     { src: 'assets/boot1.png', outline: 'assets/boot1-outline.png',
       name: 'Just Shoe', passPercent: 70, cutOffset: 0 },
     { src: 'assets/boot2.png', outline: 'assets/boot2-outline.png',
-      name: 'Kva Kva',        passPercent: 75, cutOffset: 0.12 },
+      name: 'Kva Kva',        passPercent: 70, cutOffset: 0.12 },
     { src: 'assets/boot3.png', outline: 'assets/boot3-outline.png',
       name: 'Odyssey',       passPercent: 50, cutOffset: 0.10,
       // Зсунутий трохи вліво. Число — частка довжини стопи:
@@ -244,9 +244,9 @@ export const TUNING = {
       fitBox: { left: 0.44, top: 0.03 },
       // Крило високе, і спільна рамка тиснула чобіт до 60%.
       // Своя зона піднімає стелю майже під смужку часу.
-      area: { top: 0.11 } },
+      area: { top: 0.11, left: 0.29 } },
     { src: 'assets/boot8.png', outline: 'assets/boot8-outline.png',
-      name: 'Flamingo',    passPercent: 50, cutOffset: 0, offsetX: -0.2,
+      name: 'Flamingo',    passPercent: 35, cutOffset: 0, offsetX: -0.2,
       fitBox: { right: 0.86, top: 0.27 },
       // Шия з короною тепер не бере участі в підгонці, тому за
       // повного розміру корона перекривала смужку часу. 0.86 —
@@ -263,9 +263,9 @@ export const TUNING = {
     { src: 'assets/boot10.png', outline: 'assets/boot10-outline.png',
       name: 'sOck',         passPercent: 95, cutOffset: 0 },
     { src: 'assets/boot11.png', outline: 'assets/boot11-outline.png',
-      name: 'Do not Fall',       passPercent: 70, cutOffset: 0, offsetX: -0.16},
+      name: 'Do not Fall',       passPercent: 65, cutOffset: 0, offsetX: -0.16},
     { src: 'assets/boot12.png', outline: 'assets/boot12-outline.png',
-      name: 'Leshun',     passPercent: 80, cutOffset: 0, offsetX: -0.15},
+      name: 'Leshun',     passPercent: 70, cutOffset: 0, offsetX: -0.15},
     { src: 'assets/boot13.png', outline: 'assets/boot13-outline.png',
       name: 'Clown',      passPercent: 70, cutOffset: 0 },
     { src: 'assets/boot14.png', outline: 'assets/boot14-outline.png',
@@ -309,7 +309,7 @@ export const TUNING = {
   // Так можна міняти порядок, не чіпаючи сам список: наприклад
   // [1, 4, 2] дасть три раунди — перший, четвертий і другий чобіт.
   // Число можна повторити, якщо той самий чобіт має трапитись двічі.
-  bootOrder: [4, 1, 2, 10, 6, 9, 7, 13, 11, 3, 5, 12, 8, 14 ],
+  bootOrder: [4, 1, 2, 6, 7, 9, 13, 11, 3, 10, 5, 12, 8, 14 ],
 
   // ── ВСТУП РАУНДУ ─────────────────────────────────────────────
   // Послідовність після натискання «Почати»:
