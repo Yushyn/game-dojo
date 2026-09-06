@@ -271,17 +271,90 @@ const pick = (list, i) => (list.length ? list[Math.min(i || 0, list.length - 1)]
 if (animEl && !animList.some(isVideo)) animEl.remove();
 if (soundEl && !soundList.length) soundEl.remove();
 
-animList.concat(soundList).forEach((src) => {
+// ── Попереднє завантаження відео ──────────────────────────────
+// Відсутній файл більше не мовчить: про нього видно в консолі
+// одразу при запуску сторінки, ще до першого ролика.
+function preload(src) {
   if (!src) return;
   const el = document.createElement(isVideo(src) ? 'video' : 'audio');
   el.preload = 'auto';
+  el.addEventListener('error', () => {
+    console.error('Файл ролика не знайдено: ' + src +
+      '\nПеревір, чи лежить він у папці assets/ САМЕ під цим імʼям, ' +
+      'і чи збігається ім’я з тим, що написано в src/tuning.js.');
+  });
   el.src = src;
-});
+}
 
-soundEl?.addEventListener('error', () => {
-  console.warn('Звук ролика не завантажився: ' + soundEl.getAttribute('src') +
-    ' — перевір, чи лежить цей файл у assets/');
-});
+animList.forEach(preload);
+
+// ── Звукові доріжки роликів ───────────────────────────────────
+// На КОЖЕН файл — свій власний елемент, створений і завантажений
+// одразу при запуску сторінки.
+//
+// Раніше елемент був один на всі ролики, а потрібний файл йому
+// підставляли в саму мить показу — і одразу ж викликали play().
+// Браузер не встигав перечитати нове джерело й відмовляв, тому
+// ПЕРШИЙ ролик щоразу йшов німим, а другий уже грав: до нього
+// елемент був уже прогрітий попереднім файлом. З тієї ж причини
+// мовчав і ролик перемоги — він єдиний на своєму елементі, тобто
+// для нього кожен показ перший.
+//
+// Тепер підставляти нічого не треба: у мить показу файл уже
+// завантажений і лежить у своєму елементі.
+function buildSounds(list, reuse) {
+  return list.filter(Boolean).map((src, i) => {
+    const el = (i === 0 && reuse) ? reuse : document.createElement('audio');
+    el.preload = 'auto';
+    el.dataset.unlock = '1';   // screens.js розблокує його на першому кліку
+    el.addEventListener('error', () => {
+      console.error('Звуковий файл не знайдено: ' + src +
+        '\nПеревір ім’я в папці assets/ і в src/tuning.js.');
+    });
+    el.src = src;
+    if (!el.isConnected) document.body.appendChild(el);
+    return el;
+  });
+}
+
+// Ролику з номером більшим, ніж є файлів, дістається останній —
+// так само, як і з відео.
+function soundFor(pool, idx) {
+  return pool.length ? pool[Math.min(idx || 0, pool.length - 1)] : null;
+}
+
+const animSounds = buildSounds(soundList, soundEl);
+
+// Якщо окремого mp3 немає, беремо звукову доріжку, вшиту в саме
+// відео. Гірше за окремий файл — його не глушить вимикач Sound —
+// але незрівнянно краще за німий ролик.
+//
+// Браузер називає причину відмови одним словом, і слова ці
+// означають зовсім різні речі, тому перекладаємо їх одразу:
+// шукати доведеться в різних місцях.
+function whyNoSound(name) {
+  if (name === 'NotSupportedError') {
+    return 'браузер не отримав файл. Найчастіше це 404: файла за цією адресою ' +
+      'на сервері немає. Перевір РЕГІСТР літер в імені — на Netlify ' +
+      'Auch_.mp3 і auch_.mp3 це різні файли, а на Windows однакові, ' +
+      'тому локально працює, а на сайті ні. І перевір, чи файл ' +
+      'справді закомічений і запушений у репозиторій';
+  }
+  if (name === 'NotAllowedError') {
+    return 'браузер заборонив звук: сторінка ще не отримала жодного кліку';
+  }
+  if (name === 'AbortError') {
+    return 'відтворення перервали новим завантаженням';
+  }
+  return name || 'невідома причина';
+}
+
+function fallbackToVideoTrack(videoEl, src, name) {
+  console.error('Звук ролика не заграв: ' + src +
+    '\nПричина: ' + whyNoSound(name) +
+    '.\nПоки що вмикаю доріжку, вшиту в саме відео.');
+  if (videoEl && !isMuted()) videoEl.muted = false;
+}
 
 const fadeEl = $('life-fade');
 const fadeMs = Math.round((TUNING.lives?.fadeSeconds ?? 0.35) * 1000);
@@ -322,18 +395,24 @@ function showLifeAnim(on, idx) {
 }
 
 function playAnimSound(idx) {
-  const src = pick(soundList, idx);
-  if (!soundEl || !src || isMuted()) return;
-  if (soundEl.getAttribute('src') !== src) soundEl.src = src;
-  soundEl.volume = TUNING.lives?.animSoundVolume ?? 0.9;
-  try { soundEl.currentTime = 0; } catch (e) {}
-  soundEl.play().catch(() => {});
+  if (isMuted()) return;
+  const el = soundFor(animSounds, idx);
+  if (!el) {
+    fallbackToVideoTrack(animEl, '(файл не вказано в tuning.js)', 'NotSupportedError');
+    return;
+  }
+  el.volume = TUNING.lives?.animSoundVolume ?? 0.9;
+  try { el.currentTime = 0; } catch (e) {}
+  const p = el.play();
+  if (p && p.catch) p.catch((e) => fallbackToVideoTrack(animEl, el.getAttribute('src'), e?.name));
 }
 
 function stopAnimSound() {
-  if (!soundEl) return;
-  soundEl.pause();
-  try { soundEl.currentTime = 0; } catch (e) {}
+  if (animEl) animEl.muted = true;   // знімаємо аварійне вмикання доріжки
+  animSounds.forEach((el) => {
+    el.pause();
+    try { el.currentTime = 0; } catch (e) {}
+  });
 }
 
 // ── Переможна катсцена ────────────────────────────────────────
@@ -346,12 +425,8 @@ let winPlaying = false;
 if (winEl && !winList.some(isVideo)) winEl.remove();
 if (winSoundEl && !winSounds.length) winSoundEl.remove();
 
-winList.concat(winSounds).forEach((src) => {
-  if (!src) return;
-  const el = document.createElement(isVideo(src) ? 'video' : 'audio');
-  el.preload = 'auto';
-  el.src = src;
-});
+winList.forEach(preload);
+const winSoundEls = buildSounds(winSounds, winSoundEl);
 
 let winFadeTimer = 0;
 
@@ -370,27 +445,40 @@ function showWinAnim(on) {
         if (winEl.getAttribute('src') !== src) winEl.src = src;
         try { winEl.currentTime = 0; } catch (e) {}
         winEl.play().catch(() => {});
+        // Звук запускаємо разом із картинкою, а не на 0.35 с
+        // раніше: раніше він стартував ще під час затемнення
+        // і йшов попереду відео.
+        playWinSound();
         fadeEl?.classList.remove('on');
       }, fadeMs);
+    } else {
+      playWinSound();
     }
-    playWinSound();
   } else {
-    if (winEl) { winEl.hidden = true; winEl.pause(); }
-    if (winSoundEl) {
-      winSoundEl.pause();
-      try { winSoundEl.currentTime = 0; } catch (e) {}
-    }
+    if (winEl) { winEl.hidden = true; winEl.pause(); winEl.muted = true; }
+    stopWinSound();
     duckMusic(false);
   }
 }
 
 function playWinSound() {
-  const src = pick(winSounds, 0);
-  if (!winSoundEl || !src || isMuted()) return;
-  if (winSoundEl.getAttribute('src') !== src) winSoundEl.src = src;
-  winSoundEl.volume = TUNING.win?.animSoundVolume ?? 0.9;
-  try { winSoundEl.currentTime = 0; } catch (e) {}
-  winSoundEl.play().catch(() => {});
+  if (isMuted()) return;
+  const el = soundFor(winSoundEls, 0);
+  if (!el) {
+    fallbackToVideoTrack(winEl, '(файл не вказано в tuning.js)', 'NotSupportedError');
+    return;
+  }
+  el.volume = TUNING.win?.animSoundVolume ?? 0.9;
+  try { el.currentTime = 0; } catch (e) {}
+  const p = el.play();
+  if (p && p.catch) p.catch((e) => fallbackToVideoTrack(winEl, el.getAttribute('src'), e?.name));
+}
+
+function stopWinSound() {
+  winSoundEls.forEach((el) => {
+    el.pause();
+    try { el.currentTime = 0; } catch (e) {}
+  });
 }
 
 // ══════════════════════════════════════════════════════════════

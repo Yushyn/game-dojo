@@ -499,6 +499,7 @@ function prepIntro() {
   const snd = $('s-intro-sound');
   if (snd) {
     if (C.sound) {
+      snd.dataset.unlock = '1';
       snd.src = C.sound;
       snd.load();
       // Немає mp3 — беремо доріжку з самого відео, щоб ролик
@@ -908,30 +909,35 @@ function unlockAudio() {
     if (!audio) audio = new AC();
     if (audio.state === 'suspended') audio.resume();
 
-    // Розблоковуємо звукові теги аудіо/відео для iOS Safari та Android
-    const soundEl = $('life-sound');
-    if (soundEl) {
-      soundEl.play().then(() => {
-        soundEl.pause();
-        soundEl.currentTime = 0;
-      }).catch(() => {});
-    }
-
-    const winSoundEl = $('win-sound');
-    if (winSoundEl) {
-      winSoundEl.play().then(() => {
-        winSoundEl.pause();
-        winSoundEl.currentTime = 0;
-      }).catch(() => {});
-    }
-
-    const introSoundEl = $('s-intro-sound');
-    if (introSoundEl) {
-      introSoundEl.play().then(() => {
-        introSoundEl.pause();
-        introSoundEl.currentTime = 0;
-      }).catch(() => {});
-    }
+    // Розблоковуємо звукові теги для iOS Safari та Android.
+    //
+    // Позначку data-unlock ставлять ті, хто ці елементи готує:
+    // main.js — звуки роликів, prepIntro нижче — звук інтро.
+    // Раніше тут стояли три конкретні id, і в них на цю мить ще
+    // не було жодного файлу. Браузер на такий play() відповідає
+    // помилкою й лишає елемент у стані «джерело непридатне», з
+    // якого той потім не завжди виходив — саме через це мовчав
+    // перший ролик.
+    //
+    // Гучність на час розблокування — нуль: інакше на екрані
+    // «PRESS TO START» було б чути обрізок звуку.
+    document.querySelectorAll('[data-unlock]').forEach((el) => {
+      const was = el.volume;
+      el.volume = 0;
+      const restore = () => { el.volume = was; };
+      try {
+        const p = el.play();
+        if (p && p.then) {
+          p.then(() => {
+            el.pause();
+            try { el.currentTime = 0; } catch (e) {}
+            restore();
+          }).catch(restore);
+        } else {
+          restore();
+        }
+      } catch (e) { restore(); }
+    });
   } catch (e) {
     console.warn('Звук недоступний:', e.message);
   }
