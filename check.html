@@ -31,15 +31,16 @@
 // Навмисно звичайний скрипт, а не модуль — щоб працював завжди,
 // навіть коли з модулями щось не так.
 var FILES = [
-  { path:'index.html',      mark:'data-screen',      need:'екрани: титул, меню, гра' },
-  { path:'src/screens.js',  mark:'showScreen',       need:'перемикач екранів' },
+  { path:'index.html',      mark:'s-intro-video',    need:'екран вступного ролика' },
+  { path:'src/screens.js',  mark:'playIntro',        need:'вступний ролик' },
   { path:'src/config.js',   mark:'1920',             need:'розмір 1920×1080' },
-  { path:'src/tuning.js',   mark:'btnNewGame',       need:'блок screens' },
+  { path:'src/tuning.js',   mark:'introVideo',       need:'блок introVideo' },
   { path:'src/game.js',     mark:'roundFrame',       need:'рушій гри' },
   { path:'src/main.js',     mark:'buildBrushes',     need:'кнопки розміру пензля' },
   { path:'src/db.js',       mark:'initDb',           need:'безпечне підключення бази' },
   { path:'assets/foot.png',          mark:null, need:'картинка ноги' },
-  { path:'assets/background.png',    mark:null, need:'фон сцени' },
+  { path:'assets/background.png',    mark:null, need:'фон сцени' },
+
   { path:'assets/background-wide.png', mark:null, need:'широкий фон для країв екрана' },
   { path:'assets/girl.webm',         mark:null, need:'анімація дівчинки, ролик 1' },
   { path:'assets/girl2.webm',        mark:null, need:'анімація дівчинки, ролик 2' },
@@ -48,20 +49,31 @@ var FILES = [
   { path:'assets/boot1.png',         mark:null, need:'чобіт раунду 1' },
   { path:'assets/boot1-outline.png', mark:null, need:'контур чобота 1' },
   { path:'assets/boot2.png',         mark:null, need:'чобіт раунду 2' },
-  { path:'assets/boot2-outline.png', mark:null, need:'контур чобота 2' },
-  { path:'assets/boot3.png',         mark:null, need:'чобіт раунду 3' },
-  { path:'assets/boot3-outline.png', mark:null, need:'контур чобота 3' },
-  { path:'assets/boot4.png',         mark:null, need:'чобіт раунду 4' },
-  { path:'assets/boot4-outline.png', mark:null, need:'контур чобота 4' },
-  { path:'assets/boot5.png',         mark:null, need:'чобіт раунду 5' },
-  { path:'assets/boot5-outline.png', mark:null, need:'контур чобота 5' },
-  { path:'assets/boot6.png',         mark:null, need:'чобіт раунду 6' },
+  { path:'assets/boot2-outline.png', mark:null, need:'контур чобота 2' },
+
+  { path:'assets/boot3.png',         mark:null, need:'чобіт раунду 3' },
+
+  { path:'assets/boot3-outline.png', mark:null, need:'контур чобота 3' },
+
+  { path:'assets/boot4.png',         mark:null, need:'чобіт раунду 4' },
+
+  { path:'assets/boot4-outline.png', mark:null, need:'контур чобота 4' },
+
+  { path:'assets/boot5.png',         mark:null, need:'чобіт раунду 5' },
+
+  { path:'assets/boot5-outline.png', mark:null, need:'контур чобота 5' },
+
+  { path:'assets/boot6.png',         mark:null, need:'чобіт раунду 6' },
+
   { path:'assets/boot6-outline.png', mark:null, need:'контур чобота 6' },
   { path:'assets/brush-1.png',       mark:null, need:'іконка малого інструмента' },
   { path:'assets/brush-2.png',       mark:null, need:'іконка середнього' },
-  { path:'assets/brush-3.png',       mark:null, need:'іконка великого' },
-  { path:'assets/foot2.png',         mark:null, need:'нога другого життя' },
-  { path:'assets/life-1.png',        mark:null, need:'значок життя 1' },
+  { path:'assets/brush-3.png',       mark:null, need:'іконка великого' },
+
+  { path:'assets/foot2.png',         mark:null, need:'нога другого життя' },
+
+  { path:'assets/life-1.png',        mark:null, need:'значок життя 1' },
+
   { path:'assets/life-2.png',        mark:null, need:'значок життя 2' },
   { path:'assets/The_Macabre_Waltz.mp3',    mark:null, need:'музика меню' },
   { path:'assets/fit.mp3',    mark:null, need:'музика гри' },
@@ -72,7 +84,11 @@ var FILES = [
   { path:'assets/auch.mp4', mark:null, need:'ролик втрати життя' },
   { path:'assets/auch_.mp3', mark:null, need:'звук ролика втрати життя' },
   { path:'assets/auch_2.mp4', mark:null, need:'ролик другої втрати життя' },
-  { path:'assets/auch2_audio.mp3', mark:null, need:'звук другої втрати життя' }
+  { path:'assets/auch2_audio.mp3', mark:null, need:'звук другої втрати життя' },
+  { path:'assets/intro_text.mp4', mark:null, need:'вступний ролик' },
+  { path:'assets/intro_text.mp3', mark:null, need:'звук вступного ролика' },
+  { path:'assets/outro_text.mp4', mark:null, need:'ролик перемоги' },
+  { path:'assets/outro_text.mp3', mark:null, need:'звук ролика перемоги' }
 ];
 
 var rows = [], problems = [];

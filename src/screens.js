@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════
 //  ЕКРАНИ ПОЗА ГРОЮ
-//  Титул → завантаження → меню → гра / лідерборд / автори.
+//  Титул → завантаження → вступний ролик → меню →
+//  гра / лідерборд / автори.
 //
 //  Тут немає жодного тексту: усі написи беруться з блоку
 //  `screens` у tuning.js. Правити треба там.
@@ -78,6 +79,8 @@ export function showScreen(name) {
   updateMusic(name);
   hooks.onShow?.(name);
 
+  if (name === 'intro') playIntro();
+
   if (name === 'loading' && !loadingStarted) {
     loadingStarted = true;
     runLoading();
@@ -97,6 +100,7 @@ export function initScreens(callbacks) {
   paintArt();
   buildFeet();
   prepMusic();
+  prepIntro();
   prepButtonClickSound();
   prepFullscreen();
   prepHowto();
@@ -275,6 +279,143 @@ function toggleVideo(name) {
   } else {
     vid.pause();
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ВСТУПНИЙ РОЛИК
+//  Стоїть між завантаженням і меню й показується один раз.
+//  Відео йде німим, звук — окремим mp3 поруч: так його глушить
+//  той самий вимикач Sound, що й музику, і якщо браузер звук не
+//  пустить, картинка все одно покажеться.
+//  Налаштування — блок screens.introVideo у tuning.js.
+// ══════════════════════════════════════════════════════════════
+
+const INTRO_FALLBACK = {
+  on:         true,
+  src:        'assets/intro_text.mp4',
+  sound:      'assets/intro_text.mp3',
+  volume:     0.9,
+  maxSeconds: 82,
+  allowSkip:  true,
+  skipText:   'Skip',
+};
+
+function introConf() { return { ...INTRO_FALLBACK, ...(S.introVideo || {}) }; }
+
+let introDone     = false;  // ролик уже відіграв або його нічим показати
+let introTimer    = 0;      // аварійний таймер, якщо подія «ended» не прийшла
+let introTrackOk  = true;   // окремий mp3 знайшовся
+
+// Чи є що показувати. Якщо ні — гра йде з завантаження одразу в меню.
+function introReady() {
+  const C = introConf();
+  return C.on !== false && !!C.src && !!$('s-intro-video');
+}
+
+function prepIntro() {
+  const C   = introConf();
+  const vid = $('s-intro-video');
+  if (!vid) return;
+
+  if (C.on === false || !C.src) {
+    vid.remove();
+    $('s-intro-sound')?.remove();
+    $('s-intro-skip')?.remove();
+    introDone = true;
+    return;
+  }
+
+  // Файл починає вантажитись одразу: до кінця завантаження
+  // встигає набратись достатньо, щоб ролик пішов без затинки.
+  vid.src = C.src;
+  vid.load();
+
+  vid.addEventListener('ended', endIntro);
+  vid.addEventListener('error', () => {
+    console.warn('Вступний ролик не знайдено: ' + C.src +
+      ' — перевір, чи лежить файл у папці assets/');
+    endIntro();
+  });
+
+  const snd = $('s-intro-sound');
+  if (snd) {
+    if (C.sound) {
+      snd.src = C.sound;
+      snd.load();
+      // Немає mp3 — беремо доріжку з самого відео, щоб ролик
+      // не лишився німим.
+      snd.addEventListener('error', () => {
+        console.warn('Звук вступного ролика не знайдено: ' + C.sound +
+          ' — вмикаю доріжку з самого відео.');
+        introTrackOk = false;
+      });
+    } else {
+      introTrackOk = false;
+      snd.remove();
+    }
+  } else {
+    introTrackOk = false;
+  }
+
+  const skip = $('s-intro-skip');
+  if (skip) {
+    if (C.allowSkip === false) {
+      skip.remove();
+    } else {
+      skip.textContent = C.skipText || 'Skip';
+      skip.addEventListener('click', (e) => { e.stopPropagation(); endIntro(); });
+    }
+  }
+}
+
+function playIntro() {
+  const C   = introConf();
+  const vid = $('s-intro-video');
+  const snd = $('s-intro-sound');
+  if (!vid) { endIntro(); return; }
+
+  const useTrack = !!snd && introTrackOk;
+
+  // Німе відео браузер пускає завжди. Звук іде окремим каналом —
+  // або з mp3, або, якщо його немає, з доріжки самого відео.
+  vid.muted = useTrack || isMuted();
+  try { vid.currentTime = 0; } catch (e) {}
+
+  const p = vid.play();
+  if (p && p.catch) {
+    p.catch(() => {
+      // Єдина причина відмови — незаглушений звук без дозволу.
+      // Показуємо ролик німим, це краще за чорний екран.
+      vid.muted = true;
+      const again = vid.play();
+      if (again && again.catch) again.catch(endIntro);
+    });
+  }
+
+  if (useTrack && !isMuted()) {
+    snd.volume = C.volume ?? 0.9;
+    try { snd.currentTime = 0; } catch (e) {}
+    snd.play().catch(() => {});
+  }
+
+  clearTimeout(introTimer);
+  introTimer = setTimeout(endIntro, Math.round((C.maxSeconds ?? 82) * 1000));
+}
+
+function endIntro() {
+  if (introDone) return;
+  introDone = true;
+  clearTimeout(introTimer);
+
+  const vid = $('s-intro-video');
+  const snd = $('s-intro-sound');
+  if (vid) vid.pause();
+  if (snd) { snd.pause(); try { snd.currentTime = 0; } catch (e) {} }
+
+  // Помилка могла прилетіти ще під час завантаження, коли екрана
+  // ролика на видноті немає. Тоді нічого не перемикаємо — просто
+  // запамʼятали, що показувати нічого, і завантаження піде в меню.
+  if (current === 'intro') showScreen('menu');
 }
 
 function goFullscreen() {
@@ -567,6 +708,16 @@ function bindButtons() {
     const helper = ['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock'];
     if (current === 'press' && !helper.includes(e.key)) { go('loading'); return; }
 
+    // Пропустити вступний ролик. Навмисно не «будь-яка клавіша»:
+    // з попереднього екрана рука ще на клавіатурі, і ролик
+    // згортався б випадковим натиском.
+    if (current === 'intro' &&
+        (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      endIntro();
+      return;
+    }
+
     if (e.key === 'Escape' &&
         (current === 'leaderboard' || current === 'credits' ||
          current === 'result' || current === 'lost')) go('menu');
@@ -614,6 +765,14 @@ function unlockAudio() {
         winSoundEl.currentTime = 0;
       }).catch(() => {});
     }
+
+    const introSoundEl = $('s-intro-sound');
+    if (introSoundEl) {
+      introSoundEl.play().then(() => {
+        introSoundEl.pause();
+        introSoundEl.currentTime = 0;
+      }).catch(() => {});
+    }
   } catch (e) {
     console.warn('Звук недоступний:', e.message);
   }
@@ -628,6 +787,7 @@ function runLoading() {
   if (V.poster) jobs.push(loadImage(V.poster));
   if (TUNING.background.show && TUNING.background.src) jobs.push(loadImage(TUNING.background.src));
   jobs.push(waitForVideo());
+  jobs.push(waitForIntro());
   jobs.push(waitForGame());
 
   let done = 0;
@@ -658,7 +818,12 @@ function runLoading() {
     if (pct)  pct.textContent  = v + '%';
 
     if (shown > 0.995) {
-      setTimeout(() => { if (current === 'loading') showScreen('menu'); }, 320);
+      setTimeout(() => {
+        if (current !== 'loading') return;
+        // Спершу вступний ролик, і тільки після нього — меню.
+        // Якщо ролика немає або він уже відіграв, ідемо прямо в меню.
+        showScreen(introReady() && !introDone ? 'intro' : 'menu');
+      }, 320);
       return;
     }
     requestAnimationFrame(tick);
@@ -692,6 +857,21 @@ function waitForVideo() {
     vid.addEventListener('canplaythrough', done, { once: true });
     vid.addEventListener('error', done, { once: true });
     setTimeout(done, 4000);
+  });
+}
+
+// Чекаємо не повного завантаження ролика, а лише початку: файл
+// важкий, і решта дотягнеться вже під час показу. Інакше смужка
+// завантаження стояла б хвилину на 98%.
+function waitForIntro() {
+  return new Promise((res) => {
+    const vid = $('s-intro-video');
+    if (!introReady() || !vid) return res(true);
+    if (vid.readyState >= 3) return res(true);
+    const done = () => res(true);
+    vid.addEventListener('canplay', done, { once: true });
+    vid.addEventListener('error',   done, { once: true });
+    setTimeout(done, 5000);
   });
 }
 
