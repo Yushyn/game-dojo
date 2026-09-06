@@ -149,105 +149,50 @@ function buildBrushes() {
 }
 buildBrushes();
 
-addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement) return;
-  if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
-  ...
-```[cite: 4]
-
-**Замініть весь обробник `keydown` на цей код:**
-
-```javascript
-// Змінна для збереження введеного тексту-чіту
+// ── Змінна для збереження введеного тексту-чіту ────────────────
 let cheatBuffer = '';
 
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
-  if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
+  if (currentScreen() !== 'game') return;
 
-  // Поки відкрите питання про вихід — Esc відповідає «ні»,
-  // а решта клавіш нічого не робить.
+  // Поки відкрите питання про вихід — Esc відповідає «ні»
   if (askBox && !askBox.hidden) {
     if (e.key === 'Escape') closeAsk();
     return;
   }
   if (e.key === 'Escape') { openAsk(); return; }
 
+  // Ctrl+Z (Undo) та гарячі клавіші інструментів (1, 2, 3)
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   const n = Number(e.key);
   if (n >= 1 && n <= brushButtons.length) setBrush(n - 1);
 
-  // ── ЧІТ-КОД: перевірка введення назви чобота ─────────────────
+  // ── ЛОГІКА ЧІТ-КОДУ ──────────────────────────────────────────
   const st = getState();
   if (st.phase === 'play' && e.key.length === 1) {
-    // Накопичуємо тільки літери та цифри, ігноруємо пробіли
+    // Ігноруємо пробіли при введенні
     if (e.key !== ' ') {
       cheatBuffer += e.key.toLowerCase();
     }
 
-    // Очищаємо назву чобота від пробілів для порівняння
+    // Очищаємо назву поточного чобота від пробілів
     const targetName = (st.bootName || '').replace(/\s+/g, '').toLowerCase();
 
-    // Якщо введений буфер містить у собі назву чобота
+    // Якщо введений буфер містить назву чобота — виконуємо чіт
     if (targetName && cheatBuffer.includes(targetName)) {
       cheatBuffer = ''; // Скидаємо буфер
       
-      // Симулюємо 100% перемогу в цьому раунді
-      game.lastMatch = 100;
-      game.lastOutside = 0;
-      game.lastPassed = true;
-      
-      const R = TUNING.round;
-      const full = R.pointsForFullMatch ?? 1000;
-      game.lastPoints = full;
-      game.score += game.lastPoints;
-
-      game.phase = 'result';
-      game.resultT0 = performance.now();
-      game.canEdit = false;
-      
-      render();
+      if (typeof window.__cheatWin === 'function') {
+        window.__cheatWin();
+      }
     }
 
-    // Обмежуємо довжину буфера, щоб він не розростався безкінечно
+    // Запобігаємо переповненню буфера
     if (cheatBuffer.length > 50) {
       cheatBuffer = cheatBuffer.slice(-25);
     }
   }
-});
-
-// ══════════════════════════════════════════════════════════════
-//  ВИХІД У МЕНЮ
-//  Хрестик не викидає одразу: спершу питає. Поки питання на
-//  екрані, гра стоїть на паузі — таймер не тікає, стопу рухати
-//  не можна, а сцена притемнена самим вікном.
-// ══════════════════════════════════════════════════════════════
-
-const askBox = $('ask');
-
-function openAsk() {
-  if (!askBox || !askBox.hidden) return;
-  askBox.hidden = false;
-  setPaused(true);
-  $('ask-no')?.focus();
-}
-
-function closeAsk() {
-  if (!askBox || askBox.hidden) return;
-  askBox.hidden = true;
-  setPaused(false);
-}
-
-$('hud-close')?.addEventListener('click', openAsk);
-$('ask-no')?.addEventListener('click', closeAsk);
-
-// «Так» — нічого не зберігаємо, просто йдемо в меню.
-// Знімаємо паузу ПЕРЕД виходом, інакше гра лишиться замороженою.
-$('ask-yes')?.addEventListener('click', () => {
-  askBox.hidden = true;
-  setPaused(false);
-  showScreen('menu');
-  reset();
 });
 
 // ══════════════════════════════════════════════════════════════

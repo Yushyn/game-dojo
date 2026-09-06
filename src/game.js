@@ -1898,3 +1898,17 @@ export function undo() {
   needsWarp = true;
   return true;
 }
+// game.js (у самому кінці файлу)
+window.__cheatWin = () => {
+  game.lastMatch = 100;
+  game.lastOutside = 0;
+  game.lastPassed = true;
+  const R = T.round;
+  const full = R.pointsForFullMatch ?? 1000;
+  game.lastPoints = full;
+  game.score += game.lastPoints;
+  game.phase = 'result';
+  game.resultT0 = performance.now();
+  game.canEdit = false;
+  notify();
+};
