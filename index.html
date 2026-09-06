@@ -418,6 +418,16 @@
     margin: 0; text-transform: none;
     text-shadow: 0 3px 18px rgba(0,0,0,.9);
   }
+  /* Логотип над командою. Розміри задає src/screens.js із tuning.js. */
+  .cr-logo {
+    flex: none;
+    display: flex; justify-content: center; align-items: center;
+  }
+  .cr-logo img {
+    height: 100%; width: auto; display: block;
+    filter: drop-shadow(0 6px 22px rgba(0, 0, 0, .75));
+  }
+
   .cr-photo {
     position: relative; flex: 1; min-height: 0;
     margin-top: 1.5vh;
@@ -965,6 +975,11 @@
           </svg>
         </button>
       </div>
+
+      <!-- Логотип. Окремий рядок НАД фото — тому голови він не закриває:
+           фото стоїть нижче й саме забирає ту висоту, що лишилась.
+           Розмір і відступи — у блоці creditsLogo в tuning.js. -->
+      <div class="cr-logo" id="s-credits-logo" hidden></div>
 
       <!-- Фото і підписи будує src/screens.js за списком team із tuning.js -->
       <div class="cr-photo" id="s-team"></div>

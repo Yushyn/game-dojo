@@ -280,15 +280,24 @@ function fail(message) {
 function setupFoot(img) {
   const maxSide = Math.max(200, T.image.workResolution);
   const k = maxSide / Math.max(img.width, img.height);
-  srcW = Math.max(2, Math.round(img.width * k));
-  srcH = Math.max(2, Math.round(img.height * k));
+  const iw = Math.max(2, Math.round(img.width * k));
+  const ih = Math.max(2, Math.round(img.height * k));
+
+  // Порожні поля навколо картинки. Стопу можна м'яти ЛИШЕ всередині
+  // цього полотна: за його краєм пікселів немає, і тягнути нікуди.
+  // Без полів край картинки — стіна, у яку впирається рука гравця.
+  const padF = Math.max(0, Math.min(1.5, T.image.workPadding ?? 0));
+  const padX = Math.round(iw * padF);
+  const padY = Math.round(ih * padF);
+  srcW = iw + padX * 2;
+  srcH = ih + padY * 2;
 
   const tmp = document.createElement('canvas');
   tmp.width = srcW; tmp.height = srcH;
   const tc = tmp.getContext('2d', { willReadFrequently: true });
   tc.imageSmoothingEnabled = true;
   tc.imageSmoothingQuality = 'high';
-  tc.drawImage(img, 0, 0, srcW, srcH);
+  tc.drawImage(img, padX, padY, iw, ih);
   srcData = tc.getImageData(0, 0, srcW, srcH).data;
 
   buf = document.createElement('canvas');

@@ -120,7 +120,33 @@ function fillTexts() {
 
   document.querySelectorAll('.back').forEach((b) => { b.textContent = S.btnBack; });
 
+  buildCreditsLogo();
   buildTeam();
+}
+
+// Логотип над фотографією команди. Якщо файл не знайдеться,
+// рядок просто зникає — решта екрана лишається як була.
+function buildCreditsLogo() {
+  const box = $('s-credits-logo');
+  if (!box) return;
+  const L = S.creditsLogo || {};
+  box.innerHTML = '';
+  if (!L.on || !L.src) { box.hidden = true; return; }
+
+  box.hidden = false;
+  box.style.height       = (L.height ?? 16) + 'vh';
+  box.style.marginTop    = (L.gapTop ?? 1) + 'vh';
+  box.style.marginBottom = (L.gapBottom ?? 1) + 'vh';
+
+  const img = document.createElement('img');
+  img.alt = '';
+  img.addEventListener('error', () => {
+    box.hidden = true;
+    console.warn('Логотип не знайдено: ' + L.src +
+      ' — перевір, чи файл лежить у папці assets/');
+  });
+  img.src = L.src;
+  box.appendChild(img);
 }
 
 function buildTeam() {
