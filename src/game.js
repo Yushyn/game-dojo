@@ -26,6 +26,7 @@
 
 import { GAME } from './config.js';
 import { TUNING } from './tuning.js';
+import { isMuted } from './screens.js';
 
 const T = TUNING;
 
@@ -75,6 +76,7 @@ function loadBrushSounds() {
 }
 
 function playRandomBrushSound() {
+  if (isMuted()) return; // Перевірка вимикача звуку
   if (!brushAudioPool.length) return;
   const rnd = Math.floor(Math.random() * brushAudioPool.length);
   const audio = brushAudioPool[rnd];
@@ -82,7 +84,7 @@ function playRandomBrushSound() {
 
   try {
     audio.currentTime = 0;
-    audio.volume = T.brush?.soundVolume ?? 0.6;
+    audio.volume = T.brush?.soundVolume ?? 0.7;
     audio.play().catch(() => {});
   } catch (e) {}
 }
