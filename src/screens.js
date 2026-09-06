@@ -597,6 +597,23 @@ function unlockAudio() {
     if (!AC) return;
     if (!audio) audio = new AC();
     if (audio.state === 'suspended') audio.resume();
+
+    // Розблоковуємо звукові теги аудіо/відео для iOS Safari та Android
+    const soundEl = $('life-sound');
+    if (soundEl) {
+      soundEl.play().then(() => {
+        soundEl.pause();
+        soundEl.currentTime = 0;
+      }).catch(() => {});
+    }
+
+    const winSoundEl = $('win-sound');
+    if (winSoundEl) {
+      winSoundEl.play().then(() => {
+        winSoundEl.pause();
+        winSoundEl.currentTime = 0;
+      }).catch(() => {});
+    }
   } catch (e) {
     console.warn('Звук недоступний:', e.message);
   }
