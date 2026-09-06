@@ -62,6 +62,31 @@ let failed = false, errorText = '';
 let needsWarp = true;
 let hooks = {};
 
+// ── Звуки мазка/кліку ─────────────────────────────────────────
+let brushAudioPool = [];
+
+function loadBrushSounds() {
+  const list = [].concat(T.brush?.sounds || []);
+  brushAudioPool = list.filter(Boolean).map((src) => {
+    const a = new Audio(src);
+    a.preload = 'auto';
+    return a;
+  });
+}
+
+function playRandomBrushSound() {
+  if (!brushAudioPool.length) return;
+  const rnd = Math.floor(Math.random() * brushAudioPool.length);
+  const audio = brushAudioPool[rnd];
+  if (!audio) return;
+
+  try {
+    audio.currentTime = 0;
+    audio.volume = T.brush?.soundVolume ?? 0.6;
+    audio.play().catch(() => {});
+  } catch (e) {}
+}
+
 // ── Чоботи ────────────────────────────────────────────────────
 let boots = [];
 let bgImage = null;      // фон, якщо є
@@ -133,6 +158,8 @@ export function start(canvasEl, callbacks) {
 
   try { bindPointer(); } catch (e) { return fail('Помилка запуску: ' + e.message); }
 
+  loadBrushSounds();
+
   // Декорації не критичні: якщо файлу немає, гра просто малює без нього.
   if (T.background.show) {
     loadImage(T.background.src)
@@ -142,17 +169,11 @@ export function start(canvasEl, callbacks) {
   if (T.girl?.show) loadGirl();
   loadToolIcons();
 
-  // Повноекранна заставка при втраті життя. Якщо це відео —
-  // ним керує сторінка, тут вантажимо лише картинку.
-  // Може бути одне ім'я або список. Пробуємо всі картинки зі списку
-  // по черзі: перша, яка відкрилась, і стане заглушкою. Відео тут
-  // не чіпаємо — ним керує сторінка.
   [].concat(T.lives?.anim || []).filter((A) => A && !/\.(webm|mp4)$/i.test(A))
     .reduce((chain, A) => chain.then((got) => got ||
       loadImage(A).then((im) => { animImage = im; return true; }).catch(() => false)),
       Promise.resolve(false));
 
-  // Те саме для переможної катсцени
   [].concat(T.win?.anim || []).filter((A) => A && !/\.(webm|mp4)$/i.test(A))
     .reduce((chain, A) => chain.then((got) => got ||
       loadImage(A).then((im) => { winImage = im; return true; }).catch(() => false)),
@@ -170,8 +191,6 @@ export function start(canvasEl, callbacks) {
     .then((imgs) => {
       footImages = imgs.slice(0, feet.length);
       setupFoot(footImages[0]);
-      // Порядок раундів беремо з `bootOrder`, якщо він заданий.
-      // Числа там рахуються з одиниці — так зрозуміліше без коду.
       const all = T.boots.map((def, i) => prepBoot(def, imgs[feet.length + i]));
       const order = (T.bootOrder && T.bootOrder.length)
         ? T.bootOrder.map((n) => all[n - 1]).filter(Boolean)
@@ -185,11 +204,6 @@ export function start(canvasEl, callbacks) {
       game.phase = 'idle';
       notify();
 
-      // Контури не критичні: якщо якогось немає, крок вступу
-      // просто покаже кольоровий силует замість малюнка.
-      // Контури вантажимо по самих чоботях, а не за номером у списку:
-      // після `bootOrder` порядок уже інший, і по номеру контур ліг би
-      // не на той чобіт. Один файл на кілька чобіт — теж нормально.
       const seen = new Map();
       boots.forEach((b) => {
         if (!b.outlineSrc) return;
@@ -204,8 +218,6 @@ export function start(canvasEl, callbacks) {
             waiting.forEach((x) => {
               x.outline = im;
               x.outlineBBox = box;
-              // Робоча частина контуру — своя в кожного чобота:
-              // один файл можуть ділити кілька з різними fitBox.
               if (x.fit) {
                 const key = JSON.stringify(x.fit);
                 if (!fitBoxes.has(key)) fitBoxes.set(key, bboxOfImage(im, x.fit));
@@ -219,8 +231,6 @@ export function start(canvasEl, callbacks) {
     .catch((e) => fail(e.message));
 }
 
-// Картинки інструментів. Не критичні: якщо файлу немає, курсор
-// просто лишиться кружечком, як був.
 function loadToolIcons() {
   toolIcons = TOOLS.map(() => null);
   TOOLS.forEach((tool, i) => {
@@ -241,9 +251,6 @@ function loadImage(src) {
   });
 }
 
-// Скільки відсотків збігу дає стопа, якої взагалі не торкались.
-// Це нижня межа: ставити поріг нижче за неї безглуздо — раунд
-// зараховуватиметься тому, хто нічого не робив.
 function reportBaselines() {
   ensureWarp();
   const lines = boots.map((b) => {
@@ -293,12 +300,11 @@ function setupFoot(img) {
   prevX = new Float32Array(n); prevY = new Float32Array(n);
 
   imgScale = 1; imgX = 0; imgY = 0;
-  warp();                 // перше збирання дає рамку незімʼятої стопи
+  warp();
   baseBB = footBB;
   layout();
 }
 
-// Чобіт: зменшена копія для порівняння + готовий нормалізований силует
 function prepBoot(def, img) {
   const maxSide = 420;
   const k = Math.min(1, maxSide / Math.max(img.width, img.height));
@@ -310,25 +316,19 @@ function prepBoot(def, img) {
   const tc = tmp.getContext('2d', { willReadFrequently: true });
   tc.drawImage(img, 0, 0, w, h);
   const fit = def.fitBox || null;
-  // Маска — по ПОВНОМУ силуету: саме його гравець бачить, саме за
-  // ним тягне ногу і саме він іде у відсоток. fitBox її не чіпає.
   const mask = maskFrom(tc.getImageData(0, 0, w, h).data, w, h);
   const bb = bboxOf(mask, w, h);
-  // ...а от МІСЦЕ І РОЗМІР рахуються по робочій частині: без неї
-  // гра підганяла б під стопу картинку разом із крилом чи шиєю.
   const fbb = fit ? bboxOf(trimMask(mask, w, h, fit), w, h) : null;
-  const back = img.width / w; // з координат маски назад у пікселі картинки
+  const back = img.width / w;
 
   return {
     name: def.name || '',
     outlineSrc: def.outline || '',
-    // Верхня межа площі. Якщо в чобота свого числа немає,
-    // береться загальне з блоку compare.
     cutOffset: typeof def.cutOffset === 'number' ? def.cutOffset : null,
     fit,
     pass: typeof def.passPercent === 'number' ? def.passPercent : T.round.passPercent,
     img,
-    shape: makeSilhouette(img, T.colors.overlay),   // для накладання на стопу
+    shape: makeSilhouette(img, T.colors.overlay),
     mask, mw: w, mh: h,
     scale:   typeof def.scale === 'number' ? def.scale : 1,
     offsetX: typeof def.offsetX === 'number' ? def.offsetX : 0,
@@ -337,13 +337,10 @@ function prepBoot(def, img) {
                   w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back },
     fitBBox: fbb && { cx: fbb.cx * back, cy: fbb.cy * back,
                       w: fbb.w * back, h: fbb.h * back, bottom: (fbb.y1 + 1) * back },
-    // Своя робоча зона замість спільної, якщо задана
     area: def.area || null,
   };
 }
 
-// Перефарбовуємо картинку в суцільний колір, лишаючи тільки її форму.
-// Потрібно, бо чорний чобіт на темному тлі просто не видно.
 function makeSilhouette(img, color) {
   const c = document.createElement('canvas');
   c.width = img.width; c.height = img.height;
@@ -355,32 +352,17 @@ function makeSilhouette(img, color) {
   return c;
 }
 
-// Стопа має стояти підошвою на пʼєдесталі, тож рахуємо все від
-// рамки самої стопи, ігноруючи прозорі поля навколо неї.
-// Пропорції ПЕРШОЇ ноги. Потрібні, щоб решта ніг вийшли такої
-// самої ДОВЖИНИ, а не такої самої висоти — див. layout() нижче.
 let footRefAspect = 0;
 
 function layout() {
   const I = T.image;
   const bb = baseBB || { h: srcH, cx: srcW / 2, y1: srcH - 1 };
 
-  // heightPercent задає розмір ПЕРШОЇ ноги, як і раніше.
   if (!footRefAspect) footRefAspect = bb.w / bb.h;
 
   if (I.sameLength === false) {
-    // Стара поведінка: кожну ногу тягнемо до однакової ВИСОТИ.
     imgScale = (GAME.height * I.heightPercent) / bb.h;
   } else {
-    // Ноги намальовані з різною кількістю гомілки: у другої її
-    // більше. Якщо рівняти по висоті, то при однаковій висоті
-    // кадру сама стопа виходить різної довжини — заміряно 714 і
-    // 841 піксель, тобто друга на 18% довша. А саме по довжині
-    // стопи гра підганяє чоботи, тож на другому житті все ставало
-    // помітно більшим.
-    //
-    // Тому рівняємо по ДОВЖИНІ: цільову довжину беремо з першої
-    // ноги, і для неї формула збігається зі старою.
     const targetW = GAME.height * I.heightPercent * footRefAspect;
     imgScale = targetW / bb.w;
   }
@@ -393,7 +375,6 @@ function layout() {
 //  СИЛУЕТИ І ПОРІВНЯННЯ ФОРМ
 // ══════════════════════════════════════════════════════════════
 
-// Що вважаємо «тілом» картинки: непрозоре і не біле
 function maskFrom(data, W, H) {
   const m = new Uint8Array(W * H);
   for (let i = 0, n = W * H; i < n; i++) {
@@ -405,15 +386,6 @@ function maskFrom(data, W, H) {
   return m;
 }
 
-// ── РОБОЧА ЧАСТИНА КАРТИНКИ ───────────────────────────────────
-// У деяких чобіт є декор, який до стопи не має стосунку: крило,
-// шия фламінго. Якщо міряти чобіт разом із ним, гра підганяє під
-// стопу ВСЮ картинку — і сам черевик стає крихітним та з'їжджає
-// вбік, а нога намагається залізти в його халяву.
-//
-// `fitBox` каже, яка частина картинки і є власне взуттям. Усе поза
-// нею з розрахунків викидається: і посадка, і лінія відрізу, і
-// підрахунок відсотка. Малюється чобіт при цьому цілком, з декором.
 function fitRect(fit, W, H) {
   const f = fit || {};
   const l = Math.max(0, Math.min(1, f.left   ?? 0));
@@ -424,7 +396,6 @@ function fitRect(fit, W, H) {
            y0: Math.floor(t * H), y1: Math.ceil(b * H) };
 }
 
-// Обнуляє все, що поза рамкою. Повертає ту саму маску, якщо рамки немає.
 function trimMask(mask, W, H, fit) {
   if (!fit) return mask;
   const R = fitRect(fit, W, H);
@@ -453,10 +424,6 @@ function bboxOf(mask, W, H) {
            cx: (x0 + x1 + 1) / 2, cy: (y0 + y1 + 1) / 2 };
 }
 
-// Куди саме лягає чобіт на початку раунду. Рахуємо ОДИН раз, поки
-// стопа ще не зім'ята, і далі не чіпаємо: інакше чобіт їздив би
-// за стопою, і гравцеві не було б до чого підлаштовуватись.
-// Рамка картинки в пікселях самої картинки
 function bboxOfImage(img, fit) {
   const maxSide = 420;
   const k = Math.min(1, maxSide / Math.max(img.width, img.height));
@@ -473,28 +440,15 @@ function bboxOfImage(img, fit) {
            w: bb.w * back, h: bb.h * back, bottom: (bb.y1 + 1) * back };
 }
 
-// bbox    — повний силует: його малюють і за ним рахують відсоток
-// fitBBox — робоча частина: за нею рахують РОЗМІР І МІСЦЕ.
-// Якщо fitBox не заданий, це одне й те саме.
 function frameFor(boot, bbox, forceShrink, fitBBox) {
   const bb = bbox || boot.bbox;
   const fb = fitBBox || boot.fitBBox || bb;
   if (!footBB || !bb) return null;
 
-  // Прикладаємо по ДОВЖИНІ стопи, а підошву чобота ставимо на ту саму
-  // землю, що й підошву стопи. Раніше рівняли по більшій стороні — і чобіт
-  // роздувався на всю ногу, бо стопа з гомілкою висока, а чобіт широкий.
   let k = (footBB.w / fb.w) * boot.scale;
-
-  // ...і додатково вганяємо у дозволену рамку, щоб високі чоботи
-  // не залазили на смужку часу, а довгі — на дівчинку. Рамку
-  // міряємо по ПОВНОМУ силуету: вилізти за екран не має нічого,
-  // включно з крилом чи шиєю.
   const shrink = forceShrink !== undefined ? forceShrink : shrinkToArea(bb, k, boot);
   k *= shrink;
 
-  // Вирівнюємо теж по робочій частині: підошва черевика на землю,
-  // центр черевика — над центром стопи. Декор просто їде за ними.
   return {
     k,
     shrink,
@@ -503,31 +457,22 @@ function frameFor(boot, bbox, forceShrink, fitBBox) {
   };
 }
 
-// У скільки разів зменшити чобіт, щоб він улігся в рамку з tuning.js.
-// Рахуємо точно по краях: чобіт стоїть підошвою на землі стопи й
-// вирівняний по її центру, тож де опиниться кожен його край, відомо
-// наперед. 1 означає «і так влазить».
 function shrinkToArea(bb, k, boot) {
   const base = T.bootArea || {};
-  // Чобіт може мати власну зону: {top, left, right}. Не вказані
-  // числа беруться зі спільної.
   const A = boot && boot.area ? { ...base, ...boot.area } : base;
   if (!A || A.on === false || !footBB || !imgScale) return 1;
 
-  // Межі рамки в координатах буфера стопи
   const toX = (f) => (GAME.width * f - imgX) / imgScale;
   const toY = (f) => (GAME.height * f - imgY) / imgScale;
 
-  const sole = footBB.y1 + 1;              // підошва — вона лишається на місці
-  const cx = footBB.cx;                    // чобіт вирівняний по центру стопи
+  const sole = footBB.y1 + 1;
+  const cx = footBB.cx;
   let s = 1;
 
   if (typeof A.top === 'number') {
-    const room = sole - toY(A.top);        // скільки є вгору від підошви
+    const room = sole - toY(A.top);
     if (room > 0) s = Math.min(s, room / (bb.h * k));
   }
-  // Ліворуч і праворуч чобіт росте від центру стопи в обидва боки,
-  // тому беремо вужчий бік — інакше з одного краю все одно вилізе.
   const halves = [];
   if (typeof A.left === 'number') halves.push(cx - toX(A.left));
   if (typeof A.right === 'number') halves.push(toX(A.right) - cx);
@@ -537,26 +482,20 @@ function shrinkToArea(bb, k, boot) {
   return Math.max(0.05, Math.min(1, s));
 }
 
-// Де проходить лінія відрізу: по верху халяви чобота.
-// Усе, що вище, у площу не зараховується — інакше довга гомілка
-// псувала б результат, хоча в чобіт вона все одно не влазить.
 function cutLineFor(boot, fr) {
   if (!T.compare.cutAboveBoot || !fr || !boot.bbox) return 0;
   const top = boot.bbox.bottom - boot.bbox.h;
-  // Своє число чобота переважає загальне
   const off = boot.cutOffset !== null && boot.cutOffset !== undefined
     ? boot.cutOffset : (T.compare.cutOffset || 0);
   return fr.dy + (top + off * boot.bbox.h) * fr.k;
 }
 
-// Силует стопи на сітці, натягнутій на весь буфер.
-// Сітка нерухома, тому зсув і розмір стопи тепер теж мають значення.
 function footGrid() {
   const G = T.compare.gridSize;
   const out = new Uint8Array(G * G);
   for (let j = 0; j < G; j++) {
     const y = Math.min(srcH - 1, Math.floor((j + 0.5) / G * srcH));
-    if (y < roundCutY) continue;               // вище халяви не рахуємо
+    if (y < roundCutY) continue;
     for (let i = 0; i < G; i++) {
       const x = Math.min(srcW - 1, Math.floor((i + 0.5) / G * srcW));
       out[j * G + i] = outData[((y * srcW + x) << 2) + 3] >= 128 ? 1 : 0;
@@ -565,7 +504,6 @@ function footGrid() {
   return out;
 }
 
-// Силует чобота на тій самій сітці, покладений за рамкою раунду
 function bootGrid(boot, fr) {
   const G = T.compare.gridSize;
   const out = new Uint8Array(G * G);
@@ -573,7 +511,7 @@ function bootGrid(boot, fr) {
   const sx = boot.mw / boot.img.width, sy = boot.mh / boot.img.height;
   for (let j = 0; j < G; j++) {
     const fy = (j + 0.5) / G * srcH;
-    if (fy < roundCutY) continue;              // та сама лінія і для чобота
+    if (fy < roundCutY) continue;
     const my = Math.round(((fy - fr.dy) / fr.k) * sy);
     if (my < 0 || my >= boot.mh) continue;
     for (let i = 0; i < G; i++) {
@@ -585,13 +523,6 @@ function bootGrid(boot, fr) {
   return out;
 }
 
-// Спільна площа поділена на загальну
-// Два числа за один прохід сіткою:
-//   match   — відсоток збігу форм. Це перетин, поділений на обʼєднання:
-//             штрафує і за те, чого стопі бракує, і за те, що вилізло.
-//             Саме його гравець бачить і за ним зараховується раунд.
-//   outside — яка частка САМОЇ СТОПИ лишилась поза чоботом, у відсотках.
-//             0 означає, що стопа цілком усередині.
 function matchStats(a, b) {
   if (!a || !b) return { match: 0, outside: 0 };
   let inter = 0, uni = 0, foot = 0, out = 0;
@@ -633,6 +564,7 @@ function bindPointer() {
     lastBX = b.x; lastBY = b.y;
     drawing = true;
     pushUndo();
+    playRandomBrushSound();
     stamp(b.x, b.y, 0, 0);
   });
 
@@ -667,8 +599,6 @@ function strokeTo(bx, by) {
 
 function brushSize() { return BRUSH_SIZES[brushIndex]; }
 
-// Що саме показувати на кнопках: розмір, картинку й назву.
-// Сторінка малює кнопки за цим списком, тому досить правити tuning.js.
 export function brushOptions() { return TOOLS.map((t) => ({ ...t })); }
 export function brushCurrent() { return brushIndex; }
 export function setBrush(i) {
@@ -682,11 +612,6 @@ function radiusInImage() { return (brushSize() / 2) / imgScale; }
 // ══════════════════════════════════════════════════════════════
 //  ПЕНЗЕЛЬ
 // ══════════════════════════════════════════════════════════════
-//
-//  Нова карта в точці p = стара карта в точці (p − d), мінус d,
-//  де d — на скільки має зсунутись вміст саме тут.
-//  Другий доданок зсуває, перший тягне за собою те, що вже було
-//  наліплено раніше — саме тому мазки складаються природно.
 
 function stamp(cx, cy, mvx, mvy) {
   const R = radiusInImage();
@@ -753,7 +678,7 @@ function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 function warp() {
   const W = srcW, H = srcH, src = srcData, out = outData;
   const maxX = W - 1, maxY = H - 1;
-  let bx0 = W, by0 = H, bx1 = -1, by1 = -1;   // рамка видимої частини стопи
+  let bx0 = W, by0 = H, bx1 = -1, by1 = -1;
 
   for (let y = 0; y < H; y++) {
     const row = y * W;
@@ -761,7 +686,7 @@ function warp() {
       const i = row + x, o = i << 2;
       const ox = dispX[i], oy = dispY[i];
 
-      if (ox === 0 && oy === 0) {                     // недоторкана точка
+      if (ox === 0 && oy === 0) {
         out[o] = src[o]; out[o + 1] = src[o + 1];
         out[o + 2] = src[o + 2]; out[o + 3] = src[o + 3];
         if (out[o + 3] >= 128) {
@@ -808,16 +733,13 @@ function ensureWarp() { if (needsWarp) warp(); }
 
 function beginRound(i) {
   game.round = i;
-  brushIndex = startBrush();     // кожен раунд починається із середньої кисті
+  brushIndex = startBrush();
   dispX.fill(0); dispY.fill(0);
   undoStack.length = 0;
   needsWarp = true;
-  ensureWarp();                       // щоб рамка стопи була від НЕЗІМʼЯТОЇ стопи
+  ensureWarp();
   const boot = boots[i];
   roundFrame = frameFor(boot);
-  // Контур зменшуємо ТИМ САМИМ множником, що й чобіт: якщо рахувати
-  // окремо, його рамка на пару пікселів інша — і контур ліг би трохи
-  // мимо чобота.
   roundOutline = boot.outlineBBox
     ? frameFor(boot, boot.outlineBBox, roundFrame ? roundFrame.shrink : undefined,
                boot.outlineFitBBox)
@@ -826,15 +748,12 @@ function beginRound(i) {
   roundTarget = bootGrid(boot, roundFrame);
   game.t0 = performance.now();
   game.introT = 0;
-  game.phase = 'intro';               // спершу вступ, робочий час почнеться після нього
+  game.phase = 'intro';
   notify();
 }
 
-// Скільки триває вступ
 function introTotal() { return T.intro.bootSeconds + T.intro.outlineSeconds; }
 
-// Нога зʼявляється разом із контуром і плавно опускається на пʼєдестал.
-// Повертає зсув у пікселях полотна, або null якщо ноги ще немає на сцені.
 function footDrop() {
   if (game.phase === 'idle' || game.phase === 'lost') return null;
   if (game.phase !== 'intro') return 0;
@@ -845,11 +764,10 @@ function footDrop() {
   if (I.footDropSeconds <= 0) return 0;
 
   const k = Math.min(1, t / I.footDropSeconds);
-  const eased = 1 - Math.pow(1 - k, 3);      // швидко зрушує, мʼяко гальмує
+  const eased = 1 - Math.pow(1 - k, 3);
   return -(1 - eased) * GAME.height * I.footDropFrom;
 }
 
-// Мʼяке проявлення на початку кроку і згасання в кінці
 function stepAlpha(t, len) {
   const f = T.intro.fadeSeconds;
   if (f <= 0) return 1;
@@ -864,9 +782,6 @@ function finishRound() {
   game.lastOutside = st.outside;
   game.lastPassed = game.lastMatch >= boot.pass;
 
-  // Очки: скільки дає повний збіг, помножене на відсоток збігу,
-  // мінус штраф за кожен відсоток стопи, що лишився поза чоботом.
-  // Не влучив у поріг — нуль, скільки б там не було збігу.
   const R = T.round;
   const full    = R.pointsForFullMatch ?? 1000;
   const perOut  = R.pointsPerOutside ?? 10;
@@ -880,12 +795,6 @@ function finishRound() {
   notify();
 }
 
-// Що робити після показу результату. Кнопок немає — гра вирішує сама.
-//
-// Влучив: очки й наступний чобіт. Чоботи скінчились — перемога.
-// Не влучив: мінус життя. Нога на пʼєдесталі блідне й червоніє,
-// далі повноекранна заставка, і на її місце стає наступна нога.
-// Життя скінчились — вікно програшу.
 function afterResult() {
   if (game.lastPassed) return nextBootOrWin();
 
@@ -896,25 +805,19 @@ function afterResult() {
   notify();
 }
 
-// Куди йти, коли поточний чобіт позаду
 function nextBootOrWin() {
   if (game.round + 1 < boots.length) return beginRound(game.round + 1);
-  // Чоботи скінчились — це перемога. Спершу повноекранна катсцена,
-  // і лише після неї той самий екран результату, що був досі.
-  // Якщо катсцену вимкнено, йдемо на результат одразу, як раніше.
   if (T.win?.on === false) { game.phase = 'done'; notify(); return; }
   game.winT0 = performance.now();
   game.phase = 'winanim';
   notify();
 }
 
-// Скільки триває блідніння з червоним
 function dyingTotal() {
   const L = T.lives || {};
   return (L.footFadeSeconds ?? 0.6) + (L.holdSeconds ?? 1.2);
 }
 
-// Наскільки зараз «мертва» нога: 0 — звичайна, 1 — повністю бліда й червона
 function deathMix() {
   if (game.phase === 'dying') {
     const f = Math.max(0.001, T.lives?.footFadeSeconds ?? 0.6);
@@ -923,25 +826,18 @@ function deathMix() {
   return (game.phase === 'anim' || game.phase === 'lost') ? 1 : 0;
 }
 
-// Заставка догралась: або наступне життя, або вікно програшу
 function afterAnim() {
   if (game.lastLife) {
     game.phase = 'lost';
     notify();
     return;
   }
-  // Наступна нога. Якщо картинок менше, ніж життів, лишається остання.
   game.lifeIndex = Math.min(footImages.length - 1, game.lifeIndex + 1);
   setupFoot(footImages[game.lifeIndex]);
   nextBootOrWin();
 }
 
-// Повернутись до стану «стоїмо на порожній сцені й чекаємо».
-// Потрібно кнопці «Нова гра» в меню: обнуляє очки, раунд і стопу.
 export function reset() {
-  // Викликається щоразу при вході на екран гри («Нова гра» і повернення
-  // з меню). Саме тут відлік анімації дівчинки починається спочатку,
-  // щоб гравець завжди бачив її з першого кадру, а не з середини циклу.
   girlT0 = performance.now();
   if (girlEls.length) {
     try {
@@ -951,7 +847,7 @@ export function reset() {
     } catch (e) {}
   }
 
-  if (game.phase === 'loading') return;   // картинки ще їдуть, чіпати нічого
+  if (game.phase === 'loading') return;
   game.score = 0;
   game.round = 0;
   game.lastMatch = 0;
@@ -964,7 +860,6 @@ export function reset() {
   game.lastLife = false;
   game.winT0 = 0;
 
-  // Повертаємо першу ногу, якщо грали другою
   if (footImages.length && game.lifeIndex !== 0) {
     game.lifeIndex = 0;
     setupFoot(footImages[0]);
@@ -972,13 +867,10 @@ export function reset() {
   if (dispX) { dispX.fill(0); dispY.fill(0); }
   undoStack.length = 0;
   needsWarp = true;
-  beginRound(0);          // кнопки «Почати» немає — раунд іде одразу
+  beginRound(0);
 }
 
 function updateTimers(now) {
-  // На паузі час не йде взагалі: ні вступ, ні раунд, ні показ
-  // результату. Мить паузи запамʼятовуємо, щоб потім зсунути
-  // початок відліку рівно на стільки, скільки простояли.
   if (game.paused) { game.canEdit = false; return; }
 
   if (game.phase === 'intro') {
@@ -986,7 +878,7 @@ function updateTimers(now) {
     game.introT = (now - game.t0) / 1000;
     if (game.introT >= introTotal()) {
       game.phase = 'play';
-      game.t0 = now;                  // робочий час стартує тільки тепер
+      game.t0 = now;
     }
     return;
   }
@@ -995,7 +887,6 @@ function updateTimers(now) {
     if ((now - game.resultT0) / 1000 >= (T.round.resultSeconds ?? 3.5)) afterResult();
     return;
   }
-  // Нога блідне й червоніє
   if (game.phase === 'dying') {
     game.canEdit = false;
     if ((now - game.dieT0) / 1000 >= dyingTotal()) {
@@ -1005,14 +896,11 @@ function updateTimers(now) {
     }
     return;
   }
-  // Повноекранна заставка
   if (game.phase === 'anim') {
     game.canEdit = false;
     if ((now - game.dieT0) / 1000 >= (T.lives?.animSeconds ?? 2.5)) afterAnim();
     return;
   }
-  // Переможна катсцена. Догралась — далі все як було: екран
-  // результату, рахунок, лідерборд.
   if (game.phase === 'winanim') {
     game.canEdit = false;
     if ((now - game.winT0) / 1000 >= (T.win?.animSeconds ?? 4)) {
@@ -1040,8 +928,6 @@ function updateTimers(now) {
   if (game.canEdit && game.timeLeft <= 0) finishRound();
 }
 
-// Пауза для вікна «вийти в меню?». Поки воно відкрите, час стоїть,
-// а стопу рухати не можна.
 let pauseT0 = 0;
 
 export function setPaused(on) {
@@ -1051,8 +937,8 @@ export function setPaused(on) {
     game.paused = true;
   } else {
     const stood = performance.now() - pauseT0;
-    game.t0 += stood;              // вступ і робочий час
-    game.resultT0 += stood;        // і показ результату
+    game.t0 += stood;
+    game.resultT0 += stood;
     game.paused = false;
   }
   notify();
@@ -1101,8 +987,6 @@ function frame(now) {
   updateTimers(now || performance.now());
   if (wasEdit !== game.canEdit || wasPhase !== game.phase) notify();
 
-  // Порядок шарів: фон, дівчинка, пʼєдестал, і вже потім стопа з чоботами.
-  // Пʼєдестал іде поверх дівчинки саме для того, щоб її сукня не лізла на камінь.
   ctx.fillStyle = T.colors.stage;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
   if (bgImage) ctx.drawImage(bgImage, 0, 0, GAME.width, GAME.height);
@@ -1125,21 +1009,14 @@ function frame(now) {
   if (game.phase === 'intro') drawIntro();
   if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
   if (game.phase === 'result') drawResult();
-  // Програш: чобіт не зникає разом із панеллю відсотка, а лишається
-  // на нозі, доки не почнеться повноекранна заставка.
   if (game.phase === 'dying') drawBootHold();
   if (game.canEdit && pointerInside) drawBrush();
   if (game.phase === 'anim') drawLifeAnim();
   if (game.phase === 'winanim') drawWinAnim();
 }
 
-// Нога на пʼєдесталі. При втраті життя вона блідне й заливається
-// червоним — обидва числа в блоці `lives` у tuning.js.
 function drawFoot(offsetY) {
   const w = srcW * imgScale, h = srcH * imgScale;
-  // tintFoot: false — нога лишається звичайною, а втрату життя
-  // видно на значку вгорі. true повертає стару поведінку,
-  // коли блідла й червоніла сама нога.
   const mix = (T.lives?.tintFoot === false) ? 0 : deathMix();
 
   if (mix <= 0.001) {
@@ -1151,17 +1028,13 @@ function drawFoot(offsetY) {
   const alpha = 1 - (1 - (L.footAlpha ?? 0.5)) * mix;
   const red = (L.footRed ?? 0.3) * mix;
 
-  // Червоне змішуємо на ОКРЕМОМУ полотні розміром із саму ногу.
-  // Якщо робити це прямо на сцені, source-atop лягає на все, що
-  // вже намальовано — і червоніє не нога, а весь кадр разом
-  // із пʼєдесталом і дівчинкою.
   const tc = tintCtx();
   if (tc && red > 0.002) {
     tc.clearRect(0, 0, srcW, srcH);
     tc.globalCompositeOperation = 'source-over';
     tc.globalAlpha = 1;
     tc.drawImage(buf, 0, 0);
-    tc.globalCompositeOperation = 'source-atop';   // тільки по непрозорому
+    tc.globalCompositeOperation = 'source-atop';
     tc.globalAlpha = red;
     tc.fillStyle = T.colors.dying || '#c02020';
     tc.fillRect(0, 0, srcW, srcH);
@@ -1175,7 +1048,6 @@ function drawFoot(offsetY) {
   ctx.restore();
 }
 
-// Полотно для підфарбовування ноги. Створюється раз і живе далі.
 function tintCtx() {
   if (!srcW || !srcH) return null;
   if (!tintBuf || tintBuf.width !== srcW || tintBuf.height !== srcH) {
@@ -1186,11 +1058,6 @@ function tintCtx() {
   return tintCtxCache;
 }
 
-// Повноекранна заставка при втраті життя. Відео підставляє
-// сторінка, тут малюємо картинку.
-// Переможна катсцена. Влаштована так само, як заставка втрати
-// життя: якщо в tuning.js вписано відео — його показує сторінка,
-// якщо картинку — малюємо тут, вписуючи цілком.
 function drawWinAnim() {
   const W = T.win || {};
   const t = (performance.now() - game.winT0) / 1000;
@@ -1222,7 +1089,6 @@ function drawLifeAnim() {
   ctx.fillStyle = '#05040a';
   ctx.fillRect(0, 0, GAME.width, GAME.height);
   if (animImage) {
-    // вписуємо цілком, не спотворюючи пропорції
     const k = Math.min(GAME.width / animImage.width, GAME.height / animImage.height);
     const w = animImage.width * k, h = animImage.height * k;
     ctx.drawImage(animImage, (GAME.width - w) / 2, (GAME.height - h) / 2, w, h);
@@ -1233,48 +1099,14 @@ function drawLifeAnim() {
 // ══════════════════════════════════════════════════════════════
 //  ДІВЧИНКА
 // ══════════════════════════════════════════════════════════════
-//
-//  Основний варіант — відео webm із прозорістю. Воно вдвічі детальніше
-//  за спрайтшит і при цьому легше, бо стискається як відео, а не як
-//  вісімдесят окремих картинок. Малюємо його на канвас як звичайну
-//  картинку — це браузери роблять надійно, на відміну від анімованого
-//  webp, який на канвасі застигає першим кадром.
-//
-//  Але прозорість у webm розуміє не кожен браузер. Тому після запуску
-//  ми перевіряємо це на ділі: беремо піксель у кутку, який зобовʼязаний
-//  бути прозорим. Якщо він раптом непрозорий — браузер альфу не тягне,
-//  і замість дівчинки був би чорний прямокутник. У такому разі тихо
-//  переходимо на спрайтшит.
-
-//  ЯК ЦЕ ПРАЦЮЄ
-//
-//  Роликів кілька, і вони йдуть по колу: перший, другий, знову перший.
-//  На кожен заведено окремий <video>. Той, що не грає, стоїть на паузі
-//  рівно на нульовому кадрі — розкодований і готовий стартувати миттєво.
-//
-//  Чому не вбудований loop у браузера: він робить справжнє перемотування,
-//  зупиняє відтворення й запускає наново. Виміряно — пауза 136-249 мс,
-//  до двох з половиною кадрів застигання. Око читає це як ривок.
-//
-//  Чому перехід розчиненням, а не встик: ролики намальовані окремо,
-//  і поза в кінці одного не збігається з позою на початку іншого.
-//  Виміряно — різниця вчетверо більша за звичайний крок між кадрами.
-//  Розчинення за півсекунди розмазує цю відмінність так, що її не видно.
 
 function loadGirl() {
   const G = T.girl;
   const all = (G.clips && G.clips.length) ? G.clips : [{ video: G.video }];
 
-  // Вимкнені ролики (on: false) просто не беремо.
   let list = all.filter((c) => c && c.on !== false && c.video);
-  // Усі вимкнені — не лишаємо порожнє місце, а показуємо спрайтшит.
-  // Раніше тут був просто return, і дівчинка зникала з екрана зовсім.
   if (!list.length) { useGirlSheet(); return; }
 
-  // Якщо ролик один, робимо з нього ДВІ копії й крутимо їх по черзі.
-  // Це не примха: вбудований loop у браузера перемотує відео
-  // по-справжньому й застигає на 136-249 мс — око читає це як ривок.
-  // Дві копії міняються миттєво, бо друга вже розкодована.
   const single = list.length === 1;
   if (single) list = [list[0], list[0]];
   girlCross = single ? 0.06 : Math.max(0.05, G.crossSeconds ?? 0.5);
@@ -1282,10 +1114,6 @@ function loadGirl() {
   let done = 0, finished = false;
   const bad = [];
 
-  // Кожен ролик відповідає сам за себе. Якщо якогось файлу немає,
-  // викидаємо САМЕ ЙОГО, а решта грає далі. Раніше один відсутній
-  // файл — наприклад місток, який не доїхав у assets, — відправляв
-  // усю дівчинку на запасний спрайтшит або й зовсім прибирав її.
   function finish() {
     if (finished) return;
     finished = true;
@@ -1309,13 +1137,10 @@ function loadGirl() {
       return;
     }
 
-    // Лишився один робочий ролик — крутимо його двома копіями,
-    // як і в разі, коли ролик від початку один.
     if (good.length === 1) { good = [good[0], good[0]]; girlCross = 0.06; }
 
     girlEls = good;
     girlCur = 0; girlNext = -1;
-    // Ручка для перевірки в консолі: __girl() покаже, який ролик грає
     try {
       window.__girlEls = girlEls;
       window.__girl = () => ({ cur: girlCur, next: girlNext,
@@ -1323,9 +1148,6 @@ function loadGirl() {
           t: +e.currentTime.toFixed(2), dur: +(e.duration || 0).toFixed(2),
           paused: e.paused })) });
     } catch (e) {}
-    // Прогріваємо кожен ролик: даємо йому програти один кадр і ставимо
-    // на паузу. Інакше браузер починає розкодовувати відео лише в мить
-    // переходу, і перші кадри виходять порожні — це й було блимання.
     girlEls.forEach((e, i) => {
       if (!i) return;
       try {
@@ -1358,18 +1180,14 @@ function loadGirl() {
     return v;
   });
 
-  // Запобіжник: якщо якийсь ролик не озвався ані успіхом, ані помилкою
-  // (буває на повільному з'єднанні), через 8 секунд запускаємо те, що є.
   setTimeout(() => {
     els.forEach((v) => { if (!v._seen) { v._seen = true; v._bad = true; bad.push(v._cfg.video); } });
     finish();
   }, 8000);
 }
 
-// Слідкуємо за тим, коли пора починати перехід і коли міняти основний ролик
 function girlTick() {
   if (!girlEls.length) return;
-  // якщо ролик один — просто заводимо його наново, коли догрався
   if (girlEls.length === 1) {
     const only = girlEls[0];
     if (only && only.ended) { try { only.currentTime = 0; } catch (e) {} only.play().catch(() => {}); }
@@ -1381,7 +1199,6 @@ function girlTick() {
   const cross = girlCross;
   const left = cur.duration - cur.currentTime;
 
-  // Пора підключати наступний ролик і починати розчинення.
   if (girlNext < 0 && (left <= cross || cur.ended)) {
     girlNext = (girlCur + 1) % girlEls.length;
     const nx = girlEls[girlNext];
@@ -1389,9 +1206,6 @@ function girlTick() {
     nx.play().catch(() => {});
   }
 
-  // Міняємо основний ролик ТІЛЬКИ коли наступний реально показує кадр.
-  // Поки він не готовий, тримаємо останній кадр поточного — картинка
-  // застигає на мить, але не зникає.
   if (girlNext >= 0 && (cur.ended || left <= 0.01)) {
     const nx = girlEls[girlNext];
     if (nx.readyState >= 2 && nx.currentTime > 0) {
@@ -1402,7 +1216,6 @@ function girlTick() {
   }
 }
 
-// Чи справді видно прозорість: кут кадру має бути порожнім
 function checkAlpha(v) {
   try {
     const c = document.createElement('canvas');
@@ -1412,7 +1225,7 @@ function checkAlpha(v) {
     g.drawImage(v, 0, 0, 32, 32);
     return g.getImageData(1, 1, 1, 1).data[3] < 128;
   } catch (e) {
-    return false;   // не змогли перевірити — вважаємо, що ні
+    return false;
   }
 }
 
@@ -1424,8 +1237,6 @@ function useGirlSheet() {
     .catch((e) => console.warn('Дівчинка не завантажилась зовсім:', e.message));
 }
 
-// Куди класти конкретний ролик. У кожного своє місце, бо аніматор
-// рендерить їх у різних кадрах — інакше дівчинка стрибала б на переході.
 function girlBox(cfg, aspect) {
   const G = T.girl;
   const hp = cfg?.heightPercent ?? G.heightPercent;
@@ -1436,12 +1247,6 @@ function girlBox(cfg, aspect) {
   return { x: GAME.width * cx - w / 2, y: GAME.height * by - h, w, h };
 }
 
-// Запасний шлях: усі кадри лежать поруч в одній картинці, показуємо
-// потрібний прямокутник. Кадр рахується від часу, тому швидкість не
-// залежить від того, наскільки потужний компʼютер.
-//
-// Цикл замикається сам собою: після останнього кадру лічильник
-// повертається на нульовий.
 function drawGirl(now) {
   const G = T.girl;
   if (!G || !G.show) return;
@@ -1453,14 +1258,8 @@ function drawGirl(now) {
       const nx = girlNext >= 0 ? girlEls[girlNext] : null;
       const nxReady = nx && nx.readyState >= 2 && nx.currentTime > 0;
       if (nxReady) {
-        // Розчинення рахуємо за ЧАСОМ ПОТОЧНОГО ролика, а не наступного:
-        // так воно не залежить від того, коли браузер спромігся завести відео.
         const left = Math.max(0, cur.duration - cur.currentTime);
         const t = cur.ended ? 1 : Math.max(0, Math.min(1, (girlCross - left) / girlCross));
-        // Головне: обидва кадри складаємо на окремому ПРОЗОРОМУ шарі,
-        // а вже готову картинку кладемо на екран непрозорою.
-        // Якщо малювати два напівпрозорі кадри просто на фон, у момент
-        // переходу дівчинка сумарно стає напівпрозорою і ніби блимає.
         const g = girlLayer();
         drawClipTo(g, cur, 1);
         drawClipTo(g, nx, t);
@@ -1472,7 +1271,6 @@ function drawGirl(now) {
     }
   }
 
-  // запасний шлях: кадри зі спрайтшита
   if (!girlSheet) return;
   const cols = Math.max(1, G.cols);
   const rows = Math.ceil(G.frames / cols);
@@ -1486,13 +1284,6 @@ function drawGirl(now) {
                 b.x, b.y, b.w, b.h);
 }
 
-// Колірна підгонка ролика. Ролики зняті в різному світлі, і другий
-// помітно темніший та менш насичений за перший. Замість того щоб
-// перезнімати відео, підправляємо його прямо при малюванні.
-//
-// Числа беруться з `color` того самого кліпа в tuning.js. Рядок
-// збирається один раз і запамʼятовується: збирати його щокадру
-// означало б створювати сміття 60 разів на секунду.
 function filterString(c) {
   const parts = [];
   if (c.brightness !== undefined && c.brightness !== 1) parts.push(`brightness(${c.brightness})`);
@@ -1502,12 +1293,6 @@ function filterString(c) {
   return parts.join(' ');
 }
 
-// prog — де ми всередині ролика, від 0 (початок) до 1 (кінець).
-// Якщо в кліпа є `colorTo`, підгонка ПЛАВНО переходить від `color`
-// до `colorTo`. Це потрібно містках: їхні кадри домальовані з двох
-// різних роликів, тому на початку містка колір як у першого ролика,
-// а в кінці — як у другого. Одне число на весь місток тут не працює:
-// один із двох стиків усе одно давав помітний перепад.
 function clipFilter(cfg, prog) {
   if (!cfg) return '';
   const a = cfg.color;
@@ -1531,8 +1316,6 @@ function clipFilter(cfg, prog) {
   });
 }
 
-// Не кожен браузер уміє ctx.filter. Перевіряємо один раз: якщо не
-// вміє, просто малюємо без підгонки, а не ламаємо картинку.
 let canFilter = null;
 function filterWorks() {
   if (canFilter === null) {
@@ -1545,8 +1328,6 @@ function filterWorks() {
   return canFilter;
 }
 
-// Окреме прозоре полотно, на якому збирається розчинення.
-// Створюється один раз і перестворюється лише якщо змінився розмір гри.
 let girlBuf = null, girlBufCtx = null;
 function girlLayer() {
   if (!girlBuf || girlBuf.width !== GAME.width || girlBuf.height !== GAME.height) {
@@ -1575,17 +1356,12 @@ function drawClip(v, alpha) {
   drawClipTo(ctx, v, alpha);
 }
 
-// Тінь від ноги, що падає. Лежить НЕ під ногою, а там, куди нога
-// стане: на пʼєдесталі. Поки нога високо, тінь широка й бліда;
-// ближче до землі — вужча й темніша. Без цього нога не падає,
-// а просто проявляється в повітрі.
 function drawDropShadow(offsetY) {
   const D = T.intro && T.intro.dropShadow;
   if (!D || D.on === false || !footBB || !offsetY) return;
 
-  // offsetY відʼємний, поки нога вгорі, і 0 у мить приземлення
   const from = Math.max(1, GAME.height * (T.intro.footDropFrom || 0.85));
-  const high = Math.max(0, Math.min(1, -offsetY / from));   // 1 вгорі, 0 внизу
+  const high = Math.max(0, Math.min(1, -offsetY / from));
   if (high <= 0.001) return;
 
   const cx = imgX + footBB.cx * imgScale;
@@ -1611,7 +1387,6 @@ function drawDropShadow(offsetY) {
   ctx.restore();
 }
 
-// Мʼяка тінь під підошвою: без неї стопа наче висить над каменем
 function drawShadow(offsetY) {
   const I = T.image;
   if (!I.shadow || !footBB) return;
@@ -1635,7 +1410,6 @@ function drawShadow(offsetY) {
   ctx.restore();
 }
 
-// Текст поверх фону читається гірше, тому даємо йому темну підкладку
 function textShade(y, h) {
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   g.addColorStop(0, 'rgba(8, 7, 12, 0.75)');
@@ -1664,7 +1438,6 @@ function drawFail() {
   text('Подробиці: F12 → вкладка Console', GAME.width / 2, GAME.height / 2 + 80, T.colors.dim, 24, 'center');
 }
 
-// Тонка лінія, щоб гравець бачив, звідки площа вже не рахується
 function drawCutLine() {
   if (!roundCutY) return;
   const y = imgY + roundCutY * imgScale;
@@ -1680,8 +1453,6 @@ function drawCutLine() {
   text('вище не рахується', GAME.width - 40, y - 18, T.compare.cutLineColor, 20, 'right');
 }
 
-// Чи вміє цей браузер розмивати на полотні. Перевіряємо один раз:
-// у Safari до 17-ї версії ctx.filter просто немає.
 let blurOk = null;
 function canBlur() {
   if (blurOk === null) {
@@ -1695,14 +1466,10 @@ function canBlur() {
   return blurOk;
 }
 
-// Кладемо чобіт просто на стопу: обидві форми вписані в один квадрат,
-// рівно так само, як їх потім порівнює підрахунок.
 function drawBootOnFoot(picture, frame, alpha, blurPx) {
   if (!picture || !frame || alpha <= 0.001) return;
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
-  // Розмиття підтримують не всі браузери. Якщо ні — просто малюємо
-  // різко: перехід лишиться, тільки без розфокусу.
   if (blurPx > 0.4 && canBlur()) ctx.filter = 'blur(' + blurPx.toFixed(1) + 'px)';
   ctx.drawImage(picture,
     imgX + frame.dx * imgScale, imgY + frame.dy * imgScale,
@@ -1713,18 +1480,14 @@ function drawBootOnFoot(picture, frame, alpha, blurPx) {
 function drawIntro() {
   const I = T.intro, boot = boots[game.round], t = game.introT;
 
-  // Контур лежить на місці від початку, але спочатку прозорий.
-  // Він набирає щільність рівно тоді, коли чобіт її втрачає —
-  // виходить перетікання одного в інше, а не дві окремі появи.
   const fade = Math.max(0.001, I.fadeSeconds);
-  const from = Math.max(0, I.bootSeconds - fade);   // мить, коли чобіт починає гаснути
+  const from = Math.max(0, I.bootSeconds - fade);
   let outlineA = t < from ? 0 : Math.min(1, (t - from) / fade);
-  outlineA = Math.min(outlineA, (introTotal() - t) / fade);  // і гасне в кінці вступу
+  outlineA = Math.min(outlineA, (introTotal() - t) / fade);
   outlineA = clamp01(outlineA) * I.outlineAlpha;
   if (boot.outline) drawBootOnFoot(boot.outline, roundOutline, outlineA);
   else drawBootOnFoot(boot.shape, roundFrame, outlineA * 0.7);
 
-  // Сам чобіт зверху, поки не розтане
   if (t < I.bootSeconds) {
     drawBootOnFoot(boot.img, roundFrame, stepAlpha(t, I.bootSeconds) * I.bootAlpha);
   }
@@ -1732,19 +1495,15 @@ function drawIntro() {
   drawCountdown(t);
 }
 
-// Зворотний відлік у центрі контуру: 3, 2, 1. Показує, скільки
-// лишилось дивитись, перш ніж контур зникне й піде робочий час.
 function drawCountdown(t) {
   const I = T.intro, C = I.countdown;
   if (!C || C.on === false) return;
 
-  const left = introTotal() - t;              // скільки лишилось вступу
-  if (left <= 0 || t < I.bootSeconds) return; // під час показу чобота мовчимо
+  const left = introTotal() - t;
+  if (left <= 0 || t < I.bootSeconds) return;
   const n = Math.ceil(left);
   if (n <= 0) return;
 
-  // Центр беремо по рамці контуру — цифра стоїть саме в чоботі,
-  // а не десь посеред екрана.
   const boot = boots[game.round];
   const bb = boot.outline ? boot.outlineBBox : boot.bbox;
   const fr = boot.outline ? roundOutline : roundFrame;
@@ -1752,9 +1511,7 @@ function drawCountdown(t) {
   const cx = imgX + (fr.dx + bb.cx * fr.k) * imgScale;
   const cy = imgY + (fr.dy + (bb.bottom - bb.h / 2) * fr.k) * imgScale;
 
-  // Кожна цифра трохи наростає й тане — так видно, що це відлік,
-  // а не просто число, яке стрибає.
-  const frac = left - Math.floor(left);        // 1 на початку секунди, 0 у кінці
+  const frac = left - Math.floor(left);
   const size = (C.size || 180) * (0.86 + 0.14 * frac);
   const a = Math.min(1, frac * 4);
 
@@ -1773,9 +1530,8 @@ function drawCountdown(t) {
 
 function drawBootPreview() {
   const P = T.preview, R = T.round;
-  const shown = R.previewSeconds - game.previewLeft;   // скільки вже показуємо
+  const shown = R.previewSeconds - game.previewLeft;
 
-  // Плавно проявляємо на початку і так само плавно гасимо в кінці
   let a = 1;
   if (P.fadeInSeconds > 0) a = Math.min(a, shown / P.fadeInSeconds);
   if (P.fadeOutSeconds > 0) a = Math.min(a, game.previewLeft / P.fadeOutSeconds);
@@ -1784,12 +1540,6 @@ function drawBootPreview() {
   drawBootOnFoot(boots[game.round].img, roundFrame, a);
 }
 
-// Чобіт лягає поверх стопи: обидва вписані в один квадрат
-// Чобіт, який лишається на екрані після показу результату.
-// Це рівно той самий кадр, яким закінчився drawResult: справжній
-// чобіт на повній щільності, без розмиття й без панелі з
-// відсотком. Без цього чобіт зникав тієї ж миті, коли зникала
-// панель, і кілька секунд до заставки сцена стояла порожня.
 function drawBootHold() {
   const boot = boots[game.round];
   if (!boot || !boot.img) return;
@@ -1804,25 +1554,20 @@ function drawResult() {
 
   const hold = R.outlineSeconds ?? 1.3;
   const blur = Math.max(0.05, R.blurSeconds ?? 0.7);
-  const k = Math.max(0, Math.min(1, (t - hold) / blur));   // 0 контур, 1 чобіт
+  const k = Math.max(0, Math.min(1, (t - hold) / blur));
 
   const outline = boot.outline || boot.shape;
   const frame = boot.outline ? roundOutline : roundFrame;
 
-  // Контур тане і водночас розмивається — наче розфокусовується,
-  // а не просто зникає.
   if (k < 1) {
     const px = (R.blurMax ?? 28) * k * imgScale;
     drawBootOnFoot(outline, frame, T.preview.resultAlpha * (1 - k), px);
   }
-  // Справжній чобіт проявляється на його місці
   if (k > 0) {
     drawBootOnFoot(boot.img, roundFrame, (R.bootAlpha ?? 0.85) * k,
                    (R.blurMax ?? 28) * (1 - k) * 0.5 * imgScale);
   }
 
-  // Панель із відсотком — по центру внизу, щоб не лізла на стопу
-  // й не перекривала дівчинку праворуч.
   const x = GAME.width / 2, y = GAME.height * 0.715;
   const col = game.lastPassed ? T.colors.good : T.colors.bad;
 
@@ -1853,8 +1598,6 @@ function drawBrush() {
   ctx.strokeStyle = T.colors.brushRing;
   ctx.beginPath(); ctx.arc(pointerX, pointerY, r, 0, Math.PI * 2); ctx.stroke();
 
-  // Всередині кола — картинка вибраного інструмента. Раніше там
-  // була просто крапка, і по ній не було видно, чим саме мнеш.
   const icon = toolIcons[brushIndex];
   if (!icon || !icon.width) {
     ctx.fillStyle = T.colors.brushRing;
@@ -1862,8 +1605,6 @@ function drawBrush() {
     return;
   }
 
-  // Висота іконки міряється від діаметра пензля: більший пензель —
-  // більший інструмент у руці. iconScale у tuning.js це масштабує.
   const k = (TOOLS[brushIndex].iconScale ?? T.brush.iconScale ?? 1);
   const h = brushSize() * k;
   const w = h * (icon.width / icon.height);
@@ -1900,7 +1641,7 @@ export function undo() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ЧІТ-КОД (100% ПЕРЕМОГАВ РАУНДІ)
+//  ЧІТ-КОД (100% ПЕРЕМОГА В РАУНДІ)
 // ══════════════════════════════════════════════════════════════
 window.__cheatWin = () => {
   game.lastMatch = 100;
