@@ -559,7 +559,7 @@ function shrinkToArea(bb, k, boot) {
 function liftMax() {
   if (!footBB || !imgScale) return 0;
   const A = T.bootArea || {};
-  const L = T.lift || {};
+  const L = (T.brush && T.brush.lift) || {};   // блок лежить усередині brush
 
   // Стеля: підошва не має піднятись вище за верхню межу робочої
   // зони. Це і є буквальне «від пʼєдестала до верху робочої
