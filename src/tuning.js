@@ -532,7 +532,7 @@ export const TUNING = {
   screens: {
     btnPressStart: 'PRESS TO START',
 
-    loadingText:       'Готуємо сцену',
+    loadingText:       'Setting the stage',
     loadingMinSeconds: 2.6,
     loadingMaxSeconds: 15,
 
