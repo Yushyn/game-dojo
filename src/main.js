@@ -149,6 +149,9 @@ function buildBrushes() {
 }
 buildBrushes();
 
+// ── Змінна для збереження введеного тексту-чіту ────────────────
+let cheatBuffer = '';
+
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
@@ -164,6 +167,32 @@ addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   const n = Number(e.key);
   if (n >= 1 && n <= brushButtons.length) setBrush(n - 1);
+
+  // ── ЛОГІКА ЧІТ-КОДУ ──────────────────────────────────────────
+  const st = getState();
+  if (st.phase === 'play' && e.key.length === 1) {
+    // Ігноруємо пробіли при введенні
+    if (e.key !== ' ') {
+      cheatBuffer += e.key.toLowerCase();
+    }
+
+    // Очищаємо назву поточного чобота від пробілів
+    const targetName = (st.bootName || '').replace(/\s+/g, '').toLowerCase();
+
+    // Якщо введений буфер містить назву чобота — виконуємо чіт
+    if (targetName && cheatBuffer.includes(targetName)) {
+      cheatBuffer = ''; // Скидаємо буфер
+      
+      if (typeof window.__cheatWin === 'function') {
+        window.__cheatWin();
+      }
+    }
+
+    // Запобігаємо переповненню буфера
+    if (cheatBuffer.length > 50) {
+      cheatBuffer = cheatBuffer.slice(-25);
+    }
+  }
 });
 
 // ══════════════════════════════════════════════════════════════
