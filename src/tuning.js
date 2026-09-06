@@ -172,7 +172,7 @@ export const TUNING = {
 
     // Звук до катсцени. Окремим файлом, а не всередині відео —
     // так його глушить спільний вимикач Sound у меню.
-    animSound: ['assets/outro_text.mp3'],
+    animSound: ['assets/outro_audio.mp3'],
     animSoundVolume: 0.9,
 
     // Чим залито тло за картинкою, якщо вона не на весь екран.
