@@ -551,6 +551,14 @@ export const TUNING = {
   // Внизу екрана три кнопки — три інструменти. Порядок у списку
   // = порядок кнопок зліва направо.
   brush: {
+    // Звуки при кліку/мазку по нозі (вибирається рандомно один із них)
+    sounds: [
+      'assets/Bone Crushing.mp3-SoundBible.com-537581287.mp3',
+      'assets/bone-crack-sfx.wav',
+      'assets/bone-crack-sfx-rattle.wav',
+    ],
+    soundVolume: 0.7, // Гучність (від 0.0 до 1.0)
+
     tools: [
       { size: 140, icon: 'assets/brush-1.png', name: 'Пінцет' },
       { size: 240, icon: 'assets/brush-2.png', name: 'Плоскогубці' },
