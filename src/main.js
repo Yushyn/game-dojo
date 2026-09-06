@@ -482,6 +482,31 @@ function stopWinSound() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  ЗВУК ТАБЛИЧКИ З РЕЗУЛЬТАТОМ РАУНДУ
+//  APPROVED і REJECTED мають свій звук. Файли задаються в
+//  tuning.js, блок round: passSound і failSound.
+//  Елементи — свої на кожен файл і завантажені наперед, з тієї ж
+//  причини, що й у роликів: підставляти src у мить показу не
+//  можна, браузер не встигає й мовчить.
+// ══════════════════════════════════════════════════════════════
+
+const passSounds = buildSounds([TUNING.round?.passSound].filter(Boolean));
+const failSounds = buildSounds([TUNING.round?.failSound].filter(Boolean));
+
+function playResultSound(passed) {
+  if (isMuted()) return;
+  const el = soundFor(passed ? passSounds : failSounds, 0);
+  if (!el) return;   // звук навмисно не заданий — це не помилка
+  el.volume = TUNING.round?.resultSoundVolume ?? 0.9;
+  try { el.currentTime = 0; } catch (e) {}
+  const p = el.play();
+  if (p && p.catch) {
+    p.catch((e) => console.error('Звук результату не заграв: ' +
+      el.getAttribute('src') + '\nПричина: ' + whyNoSound(e?.name)));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 //  ПОКАЗ СТАНУ
 // ══════════════════════════════════════════════════════════════
 
@@ -489,6 +514,7 @@ const barEl = $('hud-bar');
 const timerEl = $('hud-timer');
 let resultShown = false;
 let lostShown = false;
+let resultSoundDone = false;
 
 function render(s) {
   const st = s || getState();
@@ -516,6 +542,15 @@ function render(s) {
 
   showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);
   showWinAnim(!!st.showWin && currentScreen() === 'game');
+
+  // Табличка зʼявляється в ту саму мить, коли починається фаза
+  // 'result', тож звук вішаємо на її початок. Прапорець потрібен,
+  // бо render() викликається кільканадцять разів за цей час.
+  if (st.phase === 'result' && !resultSoundDone && currentScreen() === 'game') {
+    resultSoundDone = true;
+    playResultSound(st.passed);
+  }
+  if (st.phase !== 'result') resultSoundDone = false;
 
   if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {
     lostShown = true;
