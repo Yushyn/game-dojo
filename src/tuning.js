@@ -615,7 +615,7 @@ export const TUNING = {
     creditsLogo: {
       on:        true,
       src:       'assets/logo.png',
-      height:    20,
+      height:    30,
       gapTop:    1,
       gapBottom: 1,
     },
