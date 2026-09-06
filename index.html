@@ -576,7 +576,7 @@
   .hud-mid {
     /* --bar-w — довжина смужки часу. Одне число на всі три шари:
        рамку, вікно і заливку. Хочеш смужку іншої довжини — міняй тут. */
-    --bar-w: calc(var(--u) * 582);   /* було 776 — коротше на 25% */
+    --bar-w: calc(var(--u) * 776);
     position: absolute; left: 50%; top: calc(var(--u) * 16);
     transform: translateX(-50%);
     width: var(--bar-w); text-align: center;
@@ -740,15 +740,6 @@
 
   /* Три кнопки розміру пензля. Кружечок усередині малюється за
      справжнім діаметром пензля з tuning.js — що бачиш, те й отримаєш. */
-  /* Стрілка на кнопці підйому. Малюємо самі, бо свого значка для
-     неї немає — щойно зʼявиться, впиши його в tuning.js → brush.lift.icon
-     і стрілка сама поступиться місцем. */
-  .tool.arrow { display: grid; place-items: center; }
-  .tool.arrow svg { width: 100%; height: 100%; color: #e9dfcd; }
-  .sq.up .tool.arrow svg { color: #cfe6ff; }   /* нога зараз піднята */
-  /* Курсор у режимі підйому: одразу видно, що тягнути можна вгору-вниз */
-  .play.lifting canvas { cursor: ns-resize; }
-
   .brushes {
     position: absolute; left: 50%; bottom: calc(var(--u) * 24);
     transform: translateX(-50%);

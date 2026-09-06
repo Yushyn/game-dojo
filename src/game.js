@@ -102,16 +102,6 @@ const game = {
   lastPassed: false,
   lastPoints: 0,
 };
-// ── Підйом ноги ───────────────────────────────────────────────
-// Четвертий інструмент: нога піднімається від пʼєдестала до верху
-// робочої зони і опускається назад. Це не косметика — чобіт цього
-// раунду прибитий до сцени, тож підйом справді змінює збіг.
-let lift = 0;             // на скільки пікселів сцени нога піднята зараз
-let liftTarget = 0;       // те саме число, але вже приборкане межами
-let liftMode = false;     // вибрана четверта кнопка
-let dragLift = false;     // мишку затиснуто і нога їде за нею
-let dragY0 = 0, dragLift0 = 0;
-
 let footBB = null;       // рамка видимої частини стопи, оновлюється при кожному збиранні
 let roundFrame = null;    // де лежить чобіт цього раунду — рахується раз і не змінюється
 let roundOutline = null;  // те саме для картинки контуру
@@ -259,7 +249,7 @@ function reportBaselines() {
   const lines = boots.map((b) => {
     const fr = frameFor(b);
     roundCutY = cutLineFor(b, fr);
-    const v = b.sameAsFoot ? 100 : overlapPercent(footGrid(), bootGrid(b, fr));
+    const v = overlapPercent(footGrid(), bootGrid(b, fr));
     const fit = fr && fr.shrink < 0.999
       ? `, зменшено до ${Math.round(fr.shrink * 100)}% щоб улізти в рамку` : '';
     const off = b.cutOffset !== null && b.cutOffset !== undefined
@@ -349,10 +339,6 @@ function prepBoot(def, img) {
                       w: fbb.w * back, h: fbb.h * back, bottom: (fbb.y1 + 1) * back },
     // Своя робоча зона замість спільної, якщо задана
     area: def.area || null,
-    // Ціль — не силует чобота, а сама недоторкана нога.
-    // Без цього рядка прапорець із tuning.js губився тут і
-    // до гри не доїжджав.
-    sameAsFoot: !!def.sameAsFoot,
   };
 }
 
@@ -554,48 +540,6 @@ function shrinkToArea(bb, k, boot) {
 // Де проходить лінія відрізу: по верху халяви чобота.
 // Усе, що вище, у площу не зараховується — інакше довга гомілка
 // псувала б результат, хоча в чобіт вона все одно не влазить.
-// Наскільки високо нога може піднятись: доки її верх не впреться
-// у верхню межу робочої зони — ту саму, що обмежує чоботи.
-function liftMax() {
-  if (!footBB || !imgScale) return 0;
-  const A = T.bootArea || {};
-  const L = T.lift || {};
-
-  // Стеля: підошва не має піднятись вище за верхню межу робочої
-  // зони. Це і є буквальне «від пʼєдестала до верху робочої
-  // області» — на цій композиції виходить близько 612 пікселів.
-  const sole   = imgY + (footBB.y1 + 1) * imgScale;
-  const topY   = GAME.height * (typeof A.top === 'number' ? A.top : 0.17);
-  const ceiling = Math.max(0, sole - topY);
-
-  // Скільки з цієї відстані дозволяємо насправді. Повний хід
-  // виносить ногу майже за екран: сама гомілка починається вище
-  // за межу зони, тож нагорі лишається сама пʼятка.
-  const want = GAME.height * (L.rangePercent ?? 0.22);
-
-  return Math.max(0, Math.min(want, ceiling));
-}
-
-// Четверта кнопка — це РЕЖИМ, а не разова дія. Поки він увімкнений,
-// нога їздить за мишкою: натиснув на сцені й тягнеш угору-вниз.
-// Пензель у цей час не малює — інакше кожне перетягування ще й
-// мʼяло б стопу.
-export function setLiftMode(on) {
-  liftMode = !!on;
-  notify();
-}
-
-export function liftModeOn() { return liftMode; }
-
-// Куди поставила мишка, там нога й лишається — без плавного
-// доїзду. Але саму цифру все одно тримаємо в межах.
-function clampLift() {
-  const max = liftMax();
-  if (lift < 0) lift = 0;
-  if (lift > max) lift = max;
-  liftTarget = lift;
-}
-
 function cutLineFor(boot, fr) {
   if (!T.compare.cutAboveBoot || !fr || !boot.bbox) return 0;
   const top = boot.bbox.bottom - boot.bbox.h;
@@ -610,19 +554,12 @@ function cutLineFor(boot, fr) {
 function footGrid() {
   const G = T.compare.gridSize;
   const out = new Uint8Array(G * G);
-  // Підйом ноги міряємо в пікселях сцени, а сітка живе в пікселях
-  // картинки — переводимо. Нога піднялась на lift, отже в точці y
-  // тепер видно те, що в картинці лежить на lift нижче.
-  const shift = imgScale ? Math.round(lift / imgScale) : 0;
-
   for (let j = 0; j < G; j++) {
     const y = Math.min(srcH - 1, Math.floor((j + 0.5) / G * srcH));
     if (y < roundCutY) continue;               // вище халяви не рахуємо
-    const sy = y + shift;
-    if (sy < 0 || sy >= srcH) continue;        // нога поїхала за край картинки
     for (let i = 0; i < G; i++) {
       const x = Math.min(srcW - 1, Math.floor((i + 0.5) / G * srcW));
-      out[j * G + i] = outData[((sy * srcW + x) << 2) + 3] >= 128 ? 1 : 0;
+      out[j * G + i] = outData[((y * srcW + x) << 2) + 3] >= 128 ? 1 : 0;
     }
   }
   return out;
@@ -681,11 +618,7 @@ function toCanvas(e) {
   return { x: (e.clientX - r.left) * (GAME.width / r.width),
            y: (e.clientY - r.top) * (GAME.height / r.height) };
 }
-// Коли нога піднята, вона намальована вище — тож і пензель має
-// потрапляти туди, куди дивиться око, а не туди, де нога лежала б.
-function toImage(p) {
-  return { x: (p.x - imgX) / imgScale, y: (p.y - imgY + lift) / imgScale };
-}
+function toImage(p) { return { x: (p.x - imgX) / imgScale, y: (p.y - imgY) / imgScale }; }
 
 function bindPointer() {
   canvas.addEventListener('pointerenter', () => { pointerInside = true; });
@@ -696,15 +629,6 @@ function bindPointer() {
     canvas.setPointerCapture(e.pointerId);
     const p = toCanvas(e);
     pointerX = p.x; pointerY = p.y; pointerInside = true;
-
-    // Режим підйому: запамʼятовуємо, звідки почали тягнути.
-    if (liftMode) {
-      dragLift = true;
-      dragY0 = p.y;
-      dragLift0 = lift;
-      return;
-    }
-
     const b = toImage(p);
     lastBX = b.x; lastBY = b.y;
     drawing = true;
@@ -715,25 +639,12 @@ function bindPointer() {
   canvas.addEventListener('pointermove', (e) => {
     const p = toCanvas(e);
     pointerX = p.x; pointerY = p.y;
-
-    // Тягнемо вгору — нога піднімається рівно на стільки ж.
-    if (dragLift && game.canEdit) {
-      lift = dragLift0 + (dragY0 - p.y);
-      clampLift();
-      return;
-    }
-
     if (!drawing || !game.canEdit) return;
     const b = toImage(p);
     strokeTo(b.x, b.y);
   });
 
   const finish = (e) => {
-    if (dragLift) {
-      dragLift = false;
-      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
-      return;
-    }
     if (!drawing) return;
     drawing = false;
     try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -763,7 +674,6 @@ export function brushCurrent() { return brushIndex; }
 export function setBrush(i) {
   if (i < 0 || i >= BRUSH_SIZES.length) return;
   brushIndex = i;
-  liftMode = false;          // вибрали інструмент — вийшли з режиму підйому
   notify();
 }
 
@@ -900,7 +810,6 @@ function beginRound(i) {
   game.round = i;
   brushIndex = startBrush();     // кожен раунд починається із середньої кисті
   dispX.fill(0); dispY.fill(0);
-  lift = 0; liftTarget = 0; dragLift = false;
   undoStack.length = 0;
   needsWarp = true;
   ensureWarp();                       // щоб рамка стопи була від НЕЗІМʼЯТОЇ стопи
@@ -914,12 +823,7 @@ function beginRound(i) {
                boot.outlineFitBBox)
     : roundFrame;
   roundCutY = cutLineFor(boot, roundFrame);
-  // sameAsFoot: ціллю стає САМА НЕДОТОРКАНА НОГА, а не силует
-  // чобота. Шкарпетка й так повторює форму стопи, але підгонка
-  // за рамкою давала 97.5% — не через гру, а через пару пікселів
-  // на краях. Тепер «нічого не чіпав» дає рівно 100%, а кожен
-  // рух пензля чесно віднімає.
-  roundTarget = boot.sameAsFoot ? footGrid() : bootGrid(boot, roundFrame);
+  roundTarget = bootGrid(boot, roundFrame);
   game.t0 = performance.now();
   game.introT = 0;
   game.phase = 'intro';               // спершу вступ, робочий час почнеться після нього
@@ -933,7 +837,7 @@ function introTotal() { return T.intro.bootSeconds + T.intro.outlineSeconds; }
 // Повертає зсув у пікселях полотна, або null якщо ноги ще немає на сцені.
 function footDrop() {
   if (game.phase === 'idle' || game.phase === 'lost') return null;
-  if (game.phase !== 'intro') return -lift;    // підйом четвертим інструментом
+  if (game.phase !== 'intro') return 0;
 
   const I = T.intro;
   const t = game.introT - I.bootSeconds;
@@ -1072,8 +976,6 @@ export function reset() {
 }
 
 function updateTimers(now) {
-  if (!liftMode || !dragLift) clampLift();
-
   // На паузі час не йде взагалі: ні вступ, ні раунд, ні показ
   // результату. Мить паузи запамʼятовуємо, щоб потім зсунути
   // початок відліку рівно на стільки, скільки простояли.
@@ -1183,8 +1085,6 @@ export function getState() {
     showWin:  game.phase === 'winanim',
     pass: boots[game.round]?.pass ?? T.round.passPercent,
     brush: brushIndex,
-    liftMode,
-    liftUp: lift > 0.5,
     paused: game.paused,
     brushSizes: BRUSH_SIZES,
     introTotal: introTotal(),
@@ -1228,7 +1128,7 @@ function frame(now) {
   // Програш: чобіт не зникає разом із панеллю відсотка, а лишається
   // на нозі, доки не почнеться повноекранна заставка.
   if (game.phase === 'dying') drawBootHold();
-  if (game.canEdit && pointerInside && !liftMode) drawBrush();
+  if (game.canEdit && pointerInside) drawBrush();
   if (game.phase === 'anim') drawLifeAnim();
   if (game.phase === 'winanim') drawWinAnim();
 }

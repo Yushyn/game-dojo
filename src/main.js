@@ -3,8 +3,7 @@
 // самі, а єдине, що вибирає гравець, це розмір пензля.
 
 import { TUNING } from './tuning.js';
-import { start, undo, reset, getState, brushOptions, setBrush, setPaused,
-         setLiftMode } from './game.js';
+import { start, undo, reset, getState, brushOptions, setBrush, setPaused } from './game.js';
 import { topScores, submitScore, initDb, dbReady } from './db.js';
 import { initScreens, showScreen, currentScreen, isMuted, duckMusic } from './screens.js';
 
@@ -147,51 +146,6 @@ function buildBrushes() {
     brushBox.appendChild(b);
     return b;
   });
-
-  buildLift();
-}
-
-// ── Четверта кнопка: підйом ноги ──────────────────────────────
-// Той самий вигляд, що й в інструментів: та сама плитка, той самий
-// розмір значка. Різниця лише в тому, що вона не вибирає пензель,
-// а піднімає ногу до верху робочої зони й повертає на пʼєдестал.
-let liftBtn = null;
-
-function buildLift() {
-  const L = TUNING.brush?.lift;
-  if (!brushBox || !L || L.on === false) { liftBtn = null; return; }
-
-  const b = document.createElement('button');
-  b.className = 'sq';
-  b.type = 'button';
-  b.title = L.name || 'Підняти ногу';
-  b.setAttribute('aria-label', b.title);
-
-  const fit = TUNING.brush.buttonIconScale ?? 0.86;
-  const box = document.createElement('span');
-  box.className = 'tool';
-  box.style.width  = Math.round(fit * 100) + '%';
-  box.style.height = Math.round(fit * 100) + '%';
-
-  if (L.icon) {
-    const im = document.createElement('img');
-    im.src = L.icon; im.alt = '';
-    box.appendChild(im);
-  } else {
-    // Свого значка немає — малюємо стрілку вгору-вниз.
-    box.classList.add('arrow');
-    box.innerHTML =
-      '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.4" ' +
-      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<path d="M24 9v30"/><path d="M15 18l9-9 9 9"/><path d="M15 30l9 9 9-9"/></svg>';
-  }
-  b.appendChild(box);
-
-  // Кнопка вмикає режим. Вибір будь-якого пензля його вимикає —
-  // це робить сам game.js у setBrush.
-  b.addEventListener('click', () => setLiftMode(!getState().liftMode));
-  brushBox.appendChild(b);
-  liftBtn = b;
 }
 buildBrushes();
 
@@ -506,18 +460,9 @@ function render(s) {
   renderTime(st);
 
   brushButtons.forEach((b, i) => {
-    b.classList.toggle('on', i === st.brush && !st.liftMode);
+    b.classList.toggle('on', i === st.brush);
     b.disabled = !st.canEdit;
   });
-
-  // Курсор над сценою: у режимі підйому — стрілка вгору-вниз.
-  document.querySelector('.play')?.classList.toggle('lifting', !!st.liftMode);
-
-  if (liftBtn) {
-    liftBtn.classList.toggle('on', !!st.liftMode);   // режим вибраний
-    liftBtn.classList.toggle('up', !!st.liftUp);     // нога зараз піднята
-    liftBtn.disabled = !st.canEdit;
-  }
 
   // Значки життів
   // Гаснуть СПРАВА наліво: перший втрачений — правий значок,
