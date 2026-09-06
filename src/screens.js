@@ -16,6 +16,34 @@ let hooks = {};
 let loadingStarted = false;
 let gameEverOpened = false;
 
+// ── Звук кліку на UX-кнопки ──────────────────────────────────
+let buttonClickAudio = null;
+
+function prepButtonClickSound() {
+  const src = S.buttonClickSound;
+  if (!src) return;
+  buttonClickAudio = new Audio(src);
+  buttonClickAudio.preload = 'auto';
+
+  // Універсальний слухач для всіх кнопок на сторінці
+  document.addEventListener('click', (e) => {
+    if (isMuted()) return;
+    const btn = e.target.closest('button, .menu-item, .sq, .lb-close, .back, .mute');
+    if (btn) {
+      playButtonClickSound();
+    }
+  }, true);
+}
+
+export function playButtonClickSound() {
+  if (!buttonClickAudio || isMuted()) return;
+  try {
+    buttonClickAudio.currentTime = 0;
+    buttonClickAudio.volume = S.buttonClickVolume ?? 0.8;
+    buttonClickAudio.play().catch(() => {});
+  } catch (e) {}
+}
+
 // ══════════════════════════════════════════════════════════════
 //  ПЕРЕМИКАННЯ
 // ══════════════════════════════════════════════════════════════
@@ -40,7 +68,6 @@ export function showScreen(name) {
   updateMusic(name);
   hooks.onShow?.(name);
 
-  // Завантаження запускається рівно один раз, при першому заході.
   if (name === 'loading' && !loadingStarted) {
     loadingStarted = true;
     runLoading();
@@ -60,6 +87,7 @@ export function initScreens(callbacks) {
   paintArt();
   buildFeet();
   prepMusic();
+  prepButtonClickSound();
   prepFullscreen();
   prepHowto();
   preloadButtons();
@@ -68,7 +96,6 @@ export function initScreens(callbacks) {
   showScreen('press');
 }
 
-// ── Написи з tuning.js ────────────────────────────────────────
 function fillTexts() {
   const set = (id, value) => { const el = $(id); if (el && value !== undefined) el.textContent = value; };
 
@@ -86,9 +113,6 @@ function fillTexts() {
   buildTeam();
 }
 
-// ── Автори: фото команди з підписами ──────────────────────────
-// Кожен підпис стоїть під своєю людиною. Відсотки лежать
-// у tuning.js, у списку team, і зняті з самої картинки.
 function buildTeam() {
   const box = $('s-team');
   const P = S.teamPhoto || {};
@@ -96,9 +120,6 @@ function buildTeam() {
 
   box.innerHTML = '';
 
-  // Підписи стоять у відсотках, тому їхня основа має збігатися
-  // з КАРТИНКОЮ, а не з екраном. Інакше на вузькому вікні, де
-  // фото вужче за контейнер, підписи розʼїжджаються з людьми.
   const stage = document.createElement('div');
   stage.className = 'cr-stage';
 
@@ -121,8 +142,6 @@ function buildTeam() {
     el.className = 'cr-name';
     el.style.left = p.x + '%';
 
-    // Імʼя й прізвище окремими рядками — підпис виходить удвічі
-    // вужчим, і сусідні не налазять один на одного.
     const parts = String(p.name).trim().split(/\s+/);
     const first = document.createElement('b');
     first.textContent = parts.shift();
@@ -137,9 +156,6 @@ function buildTeam() {
   stage.appendChild(names);
   box.appendChild(stage);
 
-  // Ширину смуги з підписами беремо з реального розміру картинки.
-  // CSS тут не помічник: фото масштабується по висоті, і його
-  // ширина стає відома лише після розкладки. Тому міряємо.
   const fit = () => {
     const w = img.getBoundingClientRect().width;
     if (w) names.style.width = w + 'px';
@@ -150,11 +166,6 @@ function buildTeam() {
   fit();
 }
 
-// ── Сліди на екрані завантаження ──────────────────────────────
-// Аркуш один, а відбитків на ньому вісім. Замість того щоб різати
-// картинку на файли, ми кладемо її вісім разів і кожному шару
-// показуємо лише його відбиток. Далі вони по черзі проступають
-// знизу вгору — виходить хода.
 function buildFeet() {
   const box = $('s-feet');
   const A = S.loadingArt;
@@ -163,10 +174,6 @@ function buildFeet() {
   box.style.setProperty('--cycle', A.cycleSeconds + 's');
   box.innerHTML = '';
 
-  // Ім'я файлу може бути одне або кілька — так само, як у музики.
-  // Беремо перше, що справді відкрилось: аркуш зі слідами приходив
-  // від художника під різними назвами, і без цього екран
-  // завантаження мовчки лишався порожнім.
   const names = [].concat(A.src || [], 'assets/loading-feet.png');
   pickFile(names).then((src) => {
     box.querySelectorAll('i').forEach((el) => {
@@ -174,11 +181,10 @@ function buildFeet() {
     });
   });
 
-  const pause = A.cycleSeconds / A.count;   // затримка між кроками
+  const pause = A.cycleSeconds / A.count;
 
-  // Рахуємо знизу вгору: перший крок — найнижчий відбиток.
   for (let i = 0; i < A.count; i++) {
-    const fromTop = A.count - 1 - i;                    // номер зверху
+    const fromTop = A.count - 1 - i;
     const isRight = (fromTop % 2 === 0) === !!A.topIsRight;
     const [x1, x2] = isRight ? A.rightX : A.leftX;
 
@@ -188,7 +194,6 @@ function buildFeet() {
     const pc = (v, whole) => (v / whole * 100).toFixed(3) + '%';
 
     const layer = document.createElement('i');
-    // inset(зверху справа знизу зліва) — лишаємо видимим один відбиток
     layer.style.clipPath = 'inset(' + pc(yTop, A.height) + ' ' +
                                       pc(A.width - x2, A.width) + ' ' +
                                       pc(A.height - yBot, A.height) + ' ' +
@@ -198,10 +203,6 @@ function buildFeet() {
   }
 }
 
-// ── Тло екранів поза грою ─────────────────────────────────────
-// Нерухомий кадр лягає на всі три екрани одразу, а в меню поверх
-// нього грає відео. Якщо відео не підтягнеться — лишиться кадр,
-// і меню все одно виглядатиме як задумано.
 function paintArt() {
   const V = S.menuVideo || {};
   const still = V.poster || (TUNING.background.show ? TUNING.background.src : '');
@@ -214,7 +215,6 @@ function paintArt() {
   const vid = $('s-menu-video');
   if (!vid) return;
 
-  // Людям, які просили менше руху в системі, показуємо кадр.
   const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const list = V.sources || (V.src ? [V.src] : []);
   if (!list.length || V.play === false || calm) { vid.remove(); return; }
@@ -230,29 +230,16 @@ function paintArt() {
   vid.load();
 }
 
-// Відео крутиться лише поки видно меню — щоб дарма не гріти ноутбук.
 function toggleVideo(name) {
   const vid = $('s-menu-video');
   if (!vid) return;
   if (name === 'menu') {
     const p = vid.play();
-    if (p && p.catch) p.catch(() => {});   // браузер може відмовити, це не біда
+    if (p && p.catch) p.catch(() => {});
   } else {
     vid.pause();
   }
 }
-
-// ══════════════════════════════════════════════════════════════
-//  ПОВНИЙ ЕКРАН
-//  Браузер дозволяє розгорнутись лише у відповідь на дію людини.
-//  Такою дією є клік по PRESS TO START — іншої нагоди не буде,
-//  тому просимо саме там.
-//
-//  На iPhone повний екран для сторінок не працює взагалі — це
-//  обмеження Safari, обійти його нічим. Там гра просто займає
-//  все вікно, а якщо телефон тримають вертикально, показується
-//  прохання повернути його.
-// ══════════════════════════════════════════════════════════════
 
 function goFullscreen() {
   const el = document.documentElement;
@@ -261,19 +248,17 @@ function goFullscreen() {
 
   const p = ask.call(el, { navigationUI: 'hide' });
   if (p && p.then) {
-    p.then(lockLandscape).catch(() => {});   // відмовили — не біда, працюємо у вікні
+    p.then(lockLandscape).catch(() => {});
   } else {
     setTimeout(lockLandscape, 200);
   }
 }
 
-// Поворот екрана вміє замикати лише Android. Safari й десктоп
-// просто відмовляють, і це нормально.
 function lockLandscape() {
   try {
     const o = screen.orientation;
     if (o && o.lock) o.lock('landscape').catch(() => {});
-  } catch (e) { /* не підтримується */ }
+  } catch (e) {}
 }
 
 function toggleFullscreen() {
@@ -284,7 +269,6 @@ function toggleFullscreen() {
   }
 }
 
-// ── Інструкція для iPhone ─────────────────────────────────────
 function openHowto(open) {
   const box = $('howto');
   if (!box) return;
@@ -302,7 +286,6 @@ function prepHowto() {
   });
 }
 
-// Гра запущена з домашнього екрана — панелей браузера вже немає.
 function isStandalone() {
   return window.navigator.standalone === true ||
          matchMedia('(display-mode: fullscreen)').matches ||
@@ -313,13 +296,11 @@ function prepFullscreen() {
   const btn = $('s-full');
   if (!btn) return;
 
-  if (isStandalone()) { btn.remove(); return; }   // вже й так на весь екран
+  if (isStandalone()) { btn.remove(); return; }
 
   const ask = document.documentElement.requestFullscreen ||
               document.documentElement.webkitRequestFullscreen;
 
-  // iPhone: кнопки повного екрана не буде, бо Safari її не виконає.
-  // Натомість підказуємо єдиний спосіб, який там справді працює.
   if (!ask) {
     btn.textContent = S.homescreenHint || 'Add to Home Screen for fullscreen';
     btn.addEventListener('click', (e) => { e.stopPropagation(); openHowto(true); });
@@ -336,10 +317,6 @@ function prepFullscreen() {
   btn.addEventListener('click', (e) => { e.stopPropagation(); toggleFullscreen(); });
 }
 
-// ── Наведення й натиск ────────────────────────────────────────
-// Картинки станів кнопки браузер завантажує лише коли вони вперше
-// знадобляться — тобто перше наведення блимало б порожнечею.
-// Тому просимо його взяти їх заздалегідь.
 function preloadButtons() {
   ['assets/MenuButton_holder_88_100_88.png', 'assets/MenuButton_pressed_88_100_88.png',
    'assets/SquareButton_pressed.png'].forEach((src) => {
@@ -350,18 +327,9 @@ function preloadButtons() {
 
 // ══════════════════════════════════════════════════════════════
 //  МУЗИКА
-//  Два канали: один для меню, другий для самої гри. Обидва
-//  зациклені, обидва слухаються одного вимикача.
 // ══════════════════════════════════════════════════════════════
 
-// Якщо в tuning.js блоку music немає — беремо ці значення.
-// Так було не завжди: раніше без блоку музика мовчки зникала,
-// і зрозуміти чому було неможливо. Тепер вона грає в будь-якому разі.
 const MUSIC_FALLBACK = {
-  // Кілька імен на випадок, якщо файл поклали під іншою назвою:
-  // пробуємо по черзі, беремо перше, що справді відкрилось.
-  // Перші — імена, під якими файли прийшли від художника,
-  // другі — як вони називались у версіях 19-25.
   menu:        ['assets/The_Macabre_Waltz.mp3', 'assets/menu-music.mp3'],
   game:        ['assets/fit.mp3', 'assets/game-music.mp3'],
   volume:      0.5,
@@ -369,34 +337,25 @@ const MUSIC_FALLBACK = {
   showMute:    true,
 };
 
-// Грім у меню. Він не окрема музика, а доріжка до відео: звук
-// довжиною 6.10 с проти 6.08 с відео, удар припадає на 4.2 с,
-// коли спалах уже почався. Тому його не крутять самостійно —
-// його веде відео, кадр у кадр.
 const THUNDER_FALLBACK = {
   src:    ['assets/sound.mp3', 'assets/menu-thunder.mp3'],
   volume: 0.7,
-  offset: 0,   // + зсуває звук пізніше за картинку, у секундах
+  offset: 0,
 };
 
-const players = {};      // { menu: <audio>, game: <audio> }
-const fades   = {};      // таймери плавного наростання
+const players = {};
+const fades   = {};
 let muted = false;
 const MUTE_KEY = 'music-muted';
 
 function musicConf() {
   const M = S.music || {};
-
-  // Імена файлів складаємо, а не заміняємо: спершу пробуємо те, що
-  // написано в tuning.js, потім запасні. Інакше одне ім'я з tuning
-  // перекривало б увесь список, і при друкарській помилці чи іншій
-  // назві файлу музика мовчала б без пояснень.
   const both = (a, b) => [...new Set([].concat(a || [], b || []))];
 
   return {
     ...MUSIC_FALLBACK,
     ...M,
-    menu: both(M.menu || M.src, MUSIC_FALLBACK.menu),   // src — стара назва поля
+    menu: both(M.menu || M.src, MUSIC_FALLBACK.menu),
     game: both(M.game,          MUSIC_FALLBACK.game),
   };
 }
@@ -418,8 +377,6 @@ function prepMusic() {
   hook('game', $('s-music-game'), M.game);
   hook('thunder', $('s-thunder'), thunderConf().src);
 
-  // Гримить рівно стільки, скільки триває відео, і не зациклюється
-  // сам по собі — інакше за пару хвилин звук поїхав би від картинки.
   const th = players.thunder;
   if (th) { th.loop = false; th.volume = thunderConf().volume; }
   bindThunder();
@@ -430,7 +387,7 @@ function prepMusic() {
 
   paintMute(btn);
   btn.addEventListener('click', (e) => {
-    e.stopPropagation();               // клік не має йти далі по меню
+    e.stopPropagation();
     muted = !muted;
     localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
     paintMute(btn);
@@ -446,9 +403,6 @@ function hook(key, el, src) {
   el.volume = 0;
   players[key] = el;
 
-  // Якщо файлу за першим іменем немає — тихо пробуємо наступне.
-  // Раніше в такому разі музика просто мовчала, і зрозуміти чому
-  // можна було лише через вкладку Network.
   let i = 0;
   const tryNext = () => {
     if (i >= list.length) {
@@ -463,42 +417,34 @@ function hook(key, el, src) {
   tryNext();
 }
 
-// Притишити музику гри, поки на екрані ролик втрати життя.
-// Без цього зациклений трек рівня просто перекрикує «ой»:
-// у ролику перші пʼять секунд — тиха атмосфера, і лише в кінці
-// удар. На тлі музики його майже не чути.
 export function duckMusic(on) {
   if (!players.game) return;
   if (on) {
     fadeOut('game');
   } else if (current === 'game' && !muted) {
-    fadeIn('game');            // повертаємо з того ж місця, плавно
+    fadeIn('game');
   }
 }
 
-// Чи вимкнений звук. Потрібно main.js: ролик втрати життя має
-// мовчати, коли людина вимкнула звук у меню.
 export function isMuted() { return muted; }
 
 function paintMute(btn) {
-  // Напис каже, що станеться від натиску, а не який стан зараз.
   btn.textContent = muted
     ? (S.muteOn  || 'Sound: turn on')
     : (S.muteOff || 'Sound: turn off');
 }
 
-// Де яка музика доречна
 function trackFor(name) {
   if (name === 'game') return 'game';
   if (name === 'menu' || name === 'leaderboard' || name === 'credits' ||
       name === 'result' || name === 'lost') return 'menu';
-  return null;   // чорний екран і завантаження — тиша
+  return null;
 }
 
 function updateMusic(name) {
   const want = muted ? null : trackFor(name);
   Object.keys(players).forEach((key) => {
-    if (key === 'thunder') return;      // ним керує відео, не екран
+    if (key === 'thunder') return;
     if (key === want) fadeIn(key); else fadeOut(key);
   });
   syncThunder();
@@ -510,12 +456,12 @@ function fadeIn(key) {
   const M = musicConf();
 
   const p = el.play();
-  if (p && p.catch) p.catch(() => {});   // браузер може відмовити — не біда
+  if (p && p.catch) p.catch(() => {});
 
   clearInterval(fades[key]);
   const target = M.volume ?? 0.5;
   const steps = Math.max(1, Math.round((M.fadeSeconds ?? 1.5) * 20));
-  let i = Math.round(el.volume / target * steps);   // якщо вже звучить — не з нуля
+  let i = Math.round(el.volume / target * steps);
   fades[key] = setInterval(() => {
     i++;
     el.volume = Math.max(0, Math.min(target, target * i / steps));
@@ -537,11 +483,6 @@ function fadeOut(key) {
   }, 25);
 }
 
-// ── Грім під відео меню ───────────────────────────────────────
-// Звук веде відео, а не власний таймер: щоразу, коли ролик
-// починається спочатку, грім теж починається спочатку. Якщо вони
-// все ж розійшлись більше ніж на чверть секунди, звук підтягується
-// до кадру. Так спалах і удар лишаються разом хоч на п'ятому колі.
 let lastVideoT = 0;
 
 function bindThunder() {
@@ -564,7 +505,6 @@ function syncThunder() {
   const C = thunderConf();
   const now = vid.currentTime;
 
-  // Відео пішло на нове коло — починаємо звук заново.
   if (now < lastVideoT - 0.3) { th.currentTime = 0; }
   lastVideoT = now;
 
@@ -572,7 +512,7 @@ function syncThunder() {
   const len = th.duration || 0;
 
   if (target < 0 || (len && target >= len)) {
-    if (!th.paused) th.pause();          // у цій частині ролика тиша
+    if (!th.paused) th.pause();
     return;
   }
 
@@ -580,8 +520,6 @@ function syncThunder() {
   if (th.paused) { const p = th.play(); if (p && p.catch) p.catch(() => {}); }
 }
 
-// ── Кнопки ────────────────────────────────────────────────────
-// Будь-яка кнопка з data-go="ім'я екрана" веде на цей екран.
 function bindButtons() {
   document.querySelectorAll('[data-go]').forEach((btn) => {
     btn.addEventListener('click', () => go(btn.dataset.go));
@@ -590,7 +528,6 @@ function bindButtons() {
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
 
-    // На чорному екрані працює будь-яка клавіша — як і написано на кнопці.
     const helper = ['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock'];
     if (current === 'press' && !helper.includes(e.key)) { go('loading'); return; }
 
@@ -601,13 +538,8 @@ function bindButtons() {
 }
 
 function go(name) {
-  // Перший клік по сторінці — єдина мить, коли браузер дозволяє
-  // і увімкнути звук, і розгорнутись на весь екран. Не проґав її.
   if (current === 'press') unlockAudio();
 
-  // Просимо повний екран не лише на першому кліку. Браузер міг
-  // відмовити з десятка причин; кожен наступний дотик — нова
-  // законна нагода спитати ще раз, і людині це нічого не коштує.
   goFullscreen();
 
   if (name === 'game') {
@@ -619,16 +551,8 @@ function go(name) {
   showScreen(name);
 }
 
-// ══════════════════════════════════════════════════════════════
-//  ЗВУК
-//  Браузер глушить будь-яке аудіо, доки людина не клацне по
-//  сторінці. Кнопка PRESS TO START і є цим клацанням: тут ми
-//  створюємо звуковий канал, і далі музику можна вмикати будь-коли.
-// ══════════════════════════════════════════════════════════════
-
 let audio = null;
 
-// Коли зʼявиться музика — брати канал звідси.
 export function audioContext() { return audio; }
 
 function unlockAudio() {
@@ -638,15 +562,9 @@ function unlockAudio() {
     if (!audio) audio = new AC();
     if (audio.state === 'suspended') audio.resume();
   } catch (e) {
-    console.warn('Звук недоступний:', e.message);   // не критично, гра працює далі
+    console.warn('Звук недоступний:', e.message);
   }
 }
-
-// ══════════════════════════════════════════════════════════════
-//  ЗАВАНТАЖЕННЯ
-//  Смужка показує справжній прогрес, а не вигаданий: чекаємо,
-//  поки завантажиться фон і поки гра скаже, що готова.
-// ══════════════════════════════════════════════════════════════
 
 function runLoading() {
   const fill = $('s-load-fill');
@@ -671,16 +589,12 @@ function runLoading() {
     const elapsed = now - t0;
     const real = done / jobs.length;
 
-    // Показане значення плавно наздоганяє справжнє,
-    // і додатково не дозволяємо смужці стояти на місці.
     const target = Math.max(real, Math.min(0.9, elapsed / Math.max(minMs, 600)));
     shown += (target - shown) * 0.12;
 
     const ready  = real >= 1 && elapsed >= minMs;
     const giveUp = elapsed >= stopMs;
 
-    // Поки не готові — тримаємо смужку трохи нижче кінця, інакше
-    // вона доповзає до ста сама й екран зникає раніше часу.
     const cap = (ready || giveUp) ? 1 : 0.985;
     shown = Math.min(shown, cap);
 
@@ -699,8 +613,6 @@ function runLoading() {
   requestAnimationFrame(tick);
 }
 
-// Перше ім'я зі списку, за яким справді є файл.
-// Якщо не відкрилось жодне — віддаємо останнє, щоб не ламати розмітку.
 function pickFile(list) {
   const names = list.filter(Boolean);
   return names.reduce(
@@ -713,14 +625,11 @@ function loadImage(src) {
   return new Promise((res) => {
     const im = new Image();
     im.onload  = () => res(true);
-    im.onerror = () => res(false);   // фон не критичний, просто йдемо далі
+    im.onerror = () => res(false);
     im.src = src;
   });
 }
 
-// Відео великого розміру, тож чекаємо, поки його стане досить
-// для безперервного програвання. Але не більше чотирьох секунд:
-// краще показати меню з нерухомим кадром, ніж тримати людину.
 function waitForVideo() {
   return new Promise((res) => {
     const vid = $('s-menu-video');
@@ -733,8 +642,6 @@ function waitForVideo() {
   });
 }
 
-// Гра сама повідомляє, коли картинки на місці: її фаза
-// перестає бути 'loading'.
 function waitForGame() {
   return new Promise((res) => {
     const check = () => {

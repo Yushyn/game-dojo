@@ -5,7 +5,7 @@
 import { TUNING } from './tuning.js';
 import { start, undo, reset, getState, brushOptions, setBrush, setPaused } from './game.js';
 import { topScores, submitScore, initDb, dbReady } from './db.js';
-import { initScreens, showScreen, currentScreen, isMuted, duckMusic } from './screens.js';
+import { initScreens, showScreen, currentScreen, isMuted, duckMusic, playButtonClickSound } from './screens.js';
 
 // Позначка для сторожа запуску в index.html: код дожив досюди,
 // значить, усі файли на місці.
@@ -28,11 +28,6 @@ function put(id, prop, value) {
   const el = $(id);
   if (!el) {
     missing.push(id);
-    // Про кожен відсутній елемент кажемо ОДИН раз, зате завжди —
-    // навіть якщо його шукають уже під час гри, а не на старті.
-    // Саме так ловиться найпідступніший випадок: скрипти свіжі, а
-    // index.html браузер узяв зі старого кешу. Код тоді пише в
-    // елемент, якого немає, і мовчки нічого не відбувається.
     if (!warned.has(id)) {
       warned.add(id);
       console.error('У index.html немає елемента «' + id + '». ' +
@@ -70,7 +65,6 @@ if (missing.length) {
 }
 
 // ── Запуск гри ────────────────────────────────────────────────
-// Картинки їдуть одразу, ще поки людина дивиться на титульний екран.
 const canvas = $('stage');
 const statusEl = $('status');
 if (!canvas) console.error('У index.html немає <canvas id="stage">.');
@@ -86,20 +80,12 @@ initScreens({
 
   onNewGame:   () => { hideAsk(); reset(); setPaused(false); },
 
-  // Вийшли в меню — скидаємо раунд І СТАВИМО НА ПАУЗУ.
-  // Пауза тут не примха: reset() закінчується beginRound(), тобто
-  // одразу починає новий раунд. Без паузи гра тихо йшла б у фоні,
-  // поки людина ходить по меню: таймер тікав би, раунд провалювався,
-  // життя згорали — і ролик із «ой» лунав би просто в Credits.
   onLeaveGame: () => { hideAsk(); reset(); setPaused(true); },
   onOpenLeaderboard: () => refreshBoard(),
 });
 
 // ══════════════════════════════════════════════════════════════
 //  КНОПКИ ІНСТРУМЕНТІВ
-//  Три восьмикутники внизу екрана. Що на них намальовано і який
-//  діаметр пензля за кожним стоїть — усе в блоці `brush` у tuning.js.
-//  Сторінка нічого не вигадує: бере список інструментів і малює його.
 // ══════════════════════════════════════════════════════════════
 
 const brushBox = $('brushes');
@@ -121,12 +107,8 @@ function buildBrushes() {
     b.title = tool.name || (tool.size + ' px');
     b.setAttribute('aria-label', b.title);
 
-    // Картинка інструмента на кнопці. Її розмір ЧАСТКОВО йде за
-    // діаметром пензля: при mix = 1 різниця рівно пропорційна,
-    // при 0 всі три однакові. Так видно, що інструменти різні,
-    // але найменший не перетворюється на цятку.
-    const rel = tool.size / max;                 // 0..1
-    const k = fit * (1 - mix + mix * rel);       // частка від кнопки
+    const rel = tool.size / max;
+    const k = fit * (1 - mix + mix * rel);
     const box = document.createElement('span');
     box.className = 'tool';
     box.style.width  = Math.round(k * 100) + '%';
@@ -138,11 +120,14 @@ function buildBrushes() {
       im.alt = '';
       box.appendChild(im);
     } else {
-      box.classList.add('dot');                  // картинки немає — старий кружечок
+      box.classList.add('dot');
     }
     b.appendChild(box);
 
-    b.addEventListener('click', () => setBrush(i));
+    b.addEventListener('click', () => {
+      playButtonClickSound();
+      setBrush(i);
+    });
     brushBox.appendChild(b);
     return b;
   });
@@ -154,10 +139,8 @@ let cheatBuffer = '';
 
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
-  if (currentScreen() !== 'game') return;      // у меню гарячі клавіші не працюють
+  if (currentScreen() !== 'game') return;
 
-  // Поки відкрите питання про вихід — Esc відповідає «ні»,
-  // а решта клавіш нічого не робить.
   if (askBox && !askBox.hidden) {
     if (e.key === 'Escape') closeAsk();
     return;
@@ -171,24 +154,20 @@ addEventListener('keydown', (e) => {
   // ── ЛОГІКА ЧІТ-КОДУ ──────────────────────────────────────────
   const st = getState();
   if (st.phase === 'play' && e.key.length === 1) {
-    // Ігноруємо пробіли при введенні
     if (e.key !== ' ') {
       cheatBuffer += e.key.toLowerCase();
     }
 
-    // Очищаємо назву поточного чобота від пробілів
     const targetName = (st.bootName || '').replace(/\s+/g, '').toLowerCase();
 
-    // Якщо введений буфер містить назву чобота — виконуємо чіт
     if (targetName && cheatBuffer.includes(targetName)) {
-      cheatBuffer = ''; // Скидаємо буфер
+      cheatBuffer = '';
       
       if (typeof window.__cheatWin === 'function') {
         window.__cheatWin();
       }
     }
 
-    // Запобігаємо переповненню буфера
     if (cheatBuffer.length > 50) {
       cheatBuffer = cheatBuffer.slice(-25);
     }
@@ -197,9 +176,6 @@ addEventListener('keydown', (e) => {
 
 // ══════════════════════════════════════════════════════════════
 //  ВИХІД У МЕНЮ
-//  Хрестик не викидає одразу: спершу питає. Поки питання на
-//  екрані, гра стоїть на паузі — таймер не тікає, стопу рухати
-//  не можна, а сцена притемнена самим вікном.
 // ══════════════════════════════════════════════════════════════
 
 const askBox = $('ask');
@@ -220,8 +196,6 @@ function closeAsk() {
 $('hud-close')?.addEventListener('click', openAsk);
 $('ask-no')?.addEventListener('click', closeAsk);
 
-// «Так» — нічого не зберігаємо, просто йдемо в меню.
-// Знімаємо паузу ПЕРЕД виходом, інакше гра лишиться замороженою.
 $('ask-yes')?.addEventListener('click', () => {
   askBox.hidden = true;
   setPaused(false);
@@ -231,15 +205,6 @@ $('ask-yes')?.addEventListener('click', () => {
 
 // ══════════════════════════════════════════════════════════════
 //  ЖИТТЯ
-//  Значки праворуч від смужки часу. Втрачене життя не зникає —
-//  його значок наливається червоним і таким лишається до кінця
-//  гри, як зарубка. Червоніє справа наліво: перший втрачений —
-//  той, що стоїть трохи вище.
-//
-//  Червоне не «фільтр поверх картинки», а окремий шар: та сама
-//  картинка використана як трафарет (mask), і крізь неї
-//  проступає суцільний червоний. Тому червоніє рівно силует
-//  ступні, а не прямокутник навколо неї.
 // ══════════════════════════════════════════════════════════════
 
 const livesBox = $('lives');
@@ -255,8 +220,6 @@ function buildLives() {
   livesBox.style.setProperty('--life-red-alpha', L.iconRedAlpha ?? 0.9);
   livesBox.style.setProperty('--life-dim', L.iconDim ?? 0.45);
   livesBox.style.setProperty('--life-idle', L.iconIdle ?? 0.5);
-  // Вимикач підсвітки. Коли вимкнена, значки цілих життів
-  // виглядають однаково, а втрачені так само червоніють.
   livesBox.classList.toggle('no-highlight', L.iconHighlight === false);
   livesBox.style.setProperty('--life-white', L.iconWhite ?? '#ffffff');
   livesBox.style.setProperty('--life-white-alpha', L.iconWhiteAlpha ?? 0.95);
@@ -277,9 +240,6 @@ function buildLives() {
     im.alt = '';
     cell.appendChild(im);
 
-    // Два кольорові шари поверх картинки, обидва по тому самому
-    // трафарету: білий — для життя, яким зараз грають, червоний —
-    // для вже втраченого. Одночасно вони не вмикаються.
     const glow = document.createElement('i');
     glow.className = 'life-glow';
     glow.style.webkitMaskImage = 'url("' + src + '")';
@@ -299,9 +259,6 @@ function buildLives() {
 buildLives();
 
 // ── Повноекранний ролик при втраті життя ──────────────────────
-// У tuning.js це списки: перший рядок — на першу втрату життя,
-// другий — на другу. Якщо життів більше, ніж роликів, останній
-// повторюється. Один рядок замість списку теж працює.
 const animList  = [].concat(TUNING.lives?.anim || []);
 const soundList = [].concat(TUNING.lives?.animSound || []);
 const animEl    = $('life-anim');
@@ -309,17 +266,11 @@ const soundEl   = $('life-sound');
 let animPlaying = false;
 
 const isVideo = (src) => /\.(webm|mp4)$/i.test(String(src));
-// Яку ногу зараз ріжуть, таким за рахунком і ролик.
 const pick = (list, i) => (list.length ? list[Math.min(i || 0, list.length - 1)] : '');
 
-// Якщо відео немає взагалі — заставку малює саме полотно,
-// і ці елементи тут зайві.
 if (animEl && !animList.some(isVideo)) animEl.remove();
 if (soundEl && !soundList.length) soundEl.remove();
 
-// Другий ролик підвантажуємо заздалегідь. Інакше на другій
-// втраті життя була б пауза на завантаження — саме тоді, коли
-// на екрані має падати ніж.
 animList.concat(soundList).forEach((src) => {
   if (!src) return;
   const el = document.createElement(isVideo(src) ? 'video' : 'audio');
@@ -327,16 +278,11 @@ animList.concat(soundList).forEach((src) => {
   el.src = src;
 });
 
-// Найчастіша причина тиші — файл просто не доїхав у assets.
-// Хай про це буде видно в консолі, а не мовчазна загадка.
 soundEl?.addEventListener('error', () => {
   console.warn('Звук ролика не завантажився: ' + soundEl.getAttribute('src') +
     ' — перевір, чи лежить цей файл у assets/');
 });
 
-// Затемнення на вхід і вихід. Сцена спершу гасне, і вже з
-// чорноти проявляється ролик — без цього був різкий стик між
-// грою і відео.
 const fadeEl = $('life-fade');
 const fadeMs = Math.round((TUNING.lives?.fadeSeconds ?? 0.35) * 1000);
 let fadeTimer = 0;
@@ -346,27 +292,25 @@ if (fadeEl) fadeEl.style.setProperty('--life-fade', (fadeMs / 1000) + 's');
 function showLifeAnim(on, idx) {
   if (!animEl || on === animPlaying) return;
   const src = pick(animList, idx);
-  if (on && !isVideo(src)) return;      // тут картинка — її малює полотно
+  if (on && !isVideo(src)) return;
 
   animPlaying = on;
   clearTimeout(fadeTimer);
 
   if (on) {
-    fadeEl?.classList.add('on');        // 1. сцена гасне
+    fadeEl?.classList.add('on');
 
-    fadeTimer = setTimeout(() => {      // 2. коли стало чорно — пускаємо ролик
+    fadeTimer = setTimeout(() => {
       animEl.hidden = false;
       if (animEl.getAttribute('src') !== src) animEl.src = src;
       try { animEl.currentTime = 0; } catch (e) {}
       animEl.play().catch(() => {});
       playAnimSound(idx);
-      fadeEl?.classList.remove('on');   // 3. і проявляємо його з чорноти
+      fadeEl?.classList.remove('on');
     }, fadeMs);
 
-    duckMusic(true);                    // музика не спиняється, лише стихає
+    duckMusic(true);
   } else {
-    // Обидва ролики закінчуються чорним кадром, тож затемнення
-    // вмикаємо одразу — на екрані нічого не смикнеться.
     fadeEl?.classList.add('on');
     animEl.hidden = true;
     animEl.pause();
@@ -379,7 +323,7 @@ function showLifeAnim(on, idx) {
 
 function playAnimSound(idx) {
   const src = pick(soundList, idx);
-  if (!soundEl || !src || isMuted()) return;   // вимикач Sound глушить і його
+  if (!soundEl || !src || isMuted()) return;
   if (soundEl.getAttribute('src') !== src) soundEl.src = src;
   soundEl.volume = TUNING.lives?.animSoundVolume ?? 0.9;
   try { soundEl.currentTime = 0; } catch (e) {}
@@ -393,10 +337,6 @@ function stopAnimSound() {
 }
 
 // ── Переможна катсцена ────────────────────────────────────────
-// Влаштована так само, як ролик втрати життя, і користується тим
-// самим затемненням. Різниця лише в тому, що елементи свої: якби
-// вони були спільні, ролик перемоги перетирав би src ролика
-// смерті й другий програш показував би не те відео.
 const winList   = [].concat(TUNING.win?.anim || []);
 const winSounds = [].concat(TUNING.win?.animSound || []);
 const winEl     = $('win-anim');
@@ -413,12 +353,6 @@ winList.concat(winSounds).forEach((src) => {
   el.src = src;
 });
 
-// Свій таймер, а НЕ спільний fadeTimer. Це не дрібниця: перемога
-// може настати одразу після ролика втрати життя (гравець втратив
-// життя на останньому чоботі). Ролик смерті на виході вмикає
-// затемнення й через 30 мс його знімає — і якби ми тут чистили той
-// самий таймер, зняття не сталося б, а чорний шар лишився б на
-// весь екран до кінця катсцени.
 let winFadeTimer = 0;
 
 function showWinAnim(on) {
@@ -469,17 +403,9 @@ let resultShown = false;
 let lostShown = false;
 
 function render(s) {
-
   const st = s || getState();
 
-
-
-  // Поточний етап видно в розмітці: зручно і для стилів, і щоб
-
-  // подивитись у девтулзах, на чому саме гра зупинилась.
-
   document.body.dataset.phase = st.phase;
-
 
   put('hud-round', 'textContent',
       fill(t.hudRound, { name: st.bootName, n: st.round + 1, total: st.total || 1 }));
@@ -493,13 +419,6 @@ function render(s) {
     b.disabled = !st.canEdit;
   });
 
-  // Значки життів
-  // Гаснуть СПРАВА наліво: перший втрачений — правий значок,
-  // той, що стоїть трохи вище.
-  // Втрачене життя не ховаємо, а позначаємо червоним.
-  // Активне життя — те, яким грають просто зараз. Порядок той
-  // самий, що й у втратах: спершу права нога (правий значок),
-  // потім ліва. Тобто активний завжди останній НЕ втрачений.
   const activeIdx = st.lives - 1;
   lifeIcons.forEach((el, i) => {
     const lost = i >= st.lives;
@@ -507,18 +426,15 @@ function render(s) {
     el.classList.toggle('active', !lost && i === activeIdx);
   });
 
-  // Другий запобіжник: ролик і його звук — лише на екрані гри.
   showLifeAnim(!!st.showAnim && currentScreen() === 'game', st.lifeIndex);
   showWinAnim(!!st.showWin && currentScreen() === 'game');
 
-  // Життя скінчились — вікно програшу
   if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {
     lostShown = true;
     showScreen('lost');
   }
   if (st.phase !== 'lost') lostShown = false;
 
-  // Усі чоботи пройдено — самі переводимо на екран результату.
   if (st.phase === 'done' && !resultShown && currentScreen() === 'game') {
     resultShown = true;
     put('s-result-score', 'textContent', st.score);
@@ -528,10 +444,6 @@ function render(s) {
   if (st.phase !== 'done') resultShown = false;
 }
 
-// ── Таймер і смужка часу ──────────────────────────────────────
-// Винесено окремо від решти інтерфейсу, бо оновлюється НА КОЖЕН
-// КАДР. Решта (назва чобота, кнопки, життя) міняється рідко —
-// їй досить п'яти разів на секунду.
 function renderTime(st) {
   if (timerEl) {
     if (st.phase === 'play') {
@@ -547,24 +459,16 @@ function renderTime(st) {
   }
 
   if (barEl) {
-    // Смужка ВБУВАЄ: на початку раунду повна, далі правий її край
-    // повзе вліво. Порожня — час вийшов.
     const total = TUNING.round.totalSeconds || 1;
     const left = st.phase === 'play' ? st.timeLeft / total
                : st.phase === 'intro' ? 1 : 0;
     const pc = Math.max(0, Math.min(1, left)) * 100;
-    // Пишемо в стиль лише тоді, коли число справді змінилось:
-    // однакове значення щокадру змушувало б браузер перераховувати
-    // розкладку намарно.
     const next = pc.toFixed(2) + '%';
     if (next !== lastBarWidth) { barEl.style.width = next; lastBarWidth = next; }
   }
 }
 let lastBarWidth = '';
 
-// Смужка йде на кожен кадр, решта інтерфейсу — п'ять разів на
-// секунду. Раніше все разом оновлювалось раз на 200 мс, і смужка
-// через це рухалась ривками: стрибок, стоп, стрибок.
 (function timeLoop() {
   requestAnimationFrame(timeLoop);
   renderTime(getState());
@@ -573,7 +477,6 @@ let lastBarWidth = '';
 setInterval(() => render(), 200);
 render();
 
-// «Ще раз» — нова гра з тим самим станом, що й після «Нова гра»
 $('lost-again')?.addEventListener('click', () => {
   showScreen('game');
   reset();
@@ -602,7 +505,6 @@ async function refreshBoard() {
   if (!boards.length) return;
   if (!dbReady) { paintBoard('<li class="lb-empty">База недоступна</li>'); return; }
   const rows = await topScores();
-  // Значки місця є лише для перших трьох — далі просто номер.
   paintBoard(rows.length
     ? rows.map((r, i) => {
         const place = i + 1;
@@ -624,10 +526,7 @@ saveBtn?.addEventListener('click', async () => {
   statusEl.textContent = res.ok ? t.saved : 'Не збереглось: ' + res.reason;
   if (!res.ok) return;
   refreshBoard();
-  // Результат записано — гравцеві тут більше нічого робити,
-  // повертаємо його в головне меню.
   setTimeout(() => { if (currentScreen() === 'result') showScreen('menu'); }, 900);
 });
 
-// Базу підключаємо ПІСЛЯ запуску гри, щоб мертва мережа не блокувала картинку.
 initDb().then(refreshBoard);
