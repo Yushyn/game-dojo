@@ -105,6 +105,10 @@ let footImages = [];     // по одній картинці ноги на ко�
 let animImage = null;    // повноекранна заглушка при втраті життя
 let winImage  = null;    // те саме, але для переможної катсцени
 let tintBuf = null, tintCtxCache = null;   // полотно для червоної ноги
+let hintImage = null;    // рука зі стрілкою: підказка «тягни стопу»
+let hintT0 = 0;          // мить, коли підказка почала крутитись
+let hintDone = false;    // гравець уже потягнув — більше не показуємо
+let hintHideT0 = 0;      // мить, коли вона почала гаснути
 
 // ── Хід гри ───────────────────────────────────────────────────
 const game = {
@@ -170,6 +174,11 @@ export function start(canvasEl, callbacks) {
   }
   if (T.girl?.show) loadGirl();
   loadToolIcons();
+  if (T.hint?.on !== false && T.hint?.src) {
+    loadImage(T.hint.src)
+      .then((im) => { hintImage = im; })
+      .catch((e) => console.warn('Іконка підказки не завантажилась:', e.message));
+  }
 
   [].concat(T.lives?.anim || []).filter((A) => A && !/\.(webm|mp4)$/i.test(A))
     .reduce((chain, A) => chain.then((got) => got ||
@@ -574,6 +583,7 @@ function bindPointer() {
     const b = toImage(p);
     lastBX = b.x; lastBY = b.y;
     drawing = true;
+    if (!hintDone) { hintDone = true; hintHideT0 = performance.now(); }
     pushUndo();
     playRandomBrushSound();
     stamp(b.x, b.y, 0, 0);
@@ -759,6 +769,7 @@ function beginRound(i) {
   roundTarget = bootGrid(boot, roundFrame);
   game.t0 = performance.now();
   game.introT = 0;
+  hintT0 = 0;
   game.phase = 'intro';
   notify();
 }
@@ -870,6 +881,9 @@ export function reset() {
   game.lives = Math.max(1, T.lives?.count ?? 2);
   game.lastLife = false;
   game.winT0 = 0;
+  hintDone = false;
+  hintHideT0 = 0;
+  hintT0 = 0;
 
   if (footImages.length && game.lifeIndex !== 0) {
     game.lifeIndex = 0;
@@ -1021,6 +1035,7 @@ function frame(now) {
   if (game.phase === 'play' && game.previewLeft > 0) drawBootPreview();
   if (game.phase === 'result') drawResult();
   if (game.phase === 'dying') drawBootHold();
+  drawHint(now || performance.now());
   if (game.canEdit && pointerInside) drawBrush();
   if (game.phase === 'anim') drawLifeAnim();
   if (game.phase === 'winanim') drawWinAnim();
@@ -1598,6 +1613,64 @@ function drawResult() {
     ? T.texts.points.replace('{n}', game.lastPoints)
     : T.texts.need.replace('{pass}', boot.pass);
   text(line, x, y + 66, T.colors.dim, 24, 'center');
+}
+
+// ── ПІДКАЗКА «ТЯГНИ ПАЛЬЦЕМ» ──────────────────────────────────
+// Рука зі стрілкою поверх стопи: з'являється на початковому місці,
+// їде вправо, гасне — і по колу, поки гравець не почав тягнути.
+function drawHint(now) {
+  const H = T.hint || {};
+  if (H.on === false || !hintImage || !footBB || !imgScale) return;
+  if (game.phase !== 'play' || !game.canEdit || game.paused) return;
+  if ((H.onlyFirstBoot !== false) && game.round !== 0) return;
+
+  // Згасання після того, як гравець торкнувся стопи
+  let fadeOut = 1;
+  if (hintDone) {
+    const hide = Math.max(0.001, H.hideSeconds ?? 0.2);
+    fadeOut = 1 - Math.min(1, ((now - hintHideT0) / 1000) / hide);
+    if (fadeOut <= 0) return;
+  }
+
+  if (!hintT0) hintT0 = now;
+  const t = (now - hintT0) / 1000 - (H.startDelay ?? 0.4);
+  if (t < 0) return;
+
+  const hold = Math.max(0, H.holdSeconds ?? 0.25);
+  const move = Math.max(0.05, H.moveSeconds ?? 1.1);
+  const gap  = Math.max(0, H.gapSeconds ?? 0.5);
+  const cycle = hold + move + gap;
+  const c = t % cycle;                       // час усередині одного кола
+
+  let k = 0;                                  // 0 — старт, 1 — кінець зсуву
+  if (c > hold) k = Math.min(1, (c - hold) / move);
+  if (c > hold + move) return;                // пауза між колами
+
+  const eased = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+
+  // Проявлення на початку кола й згасання наприкінці
+  const f = Math.max(0.001, H.fadeSeconds ?? 0.25);
+  const inCycle = c;
+  const len = hold + move;
+  const fade = Math.max(0, Math.min(1,
+    Math.min(inCycle / f, (len - inCycle) / f)));
+
+  // Усі розміри рахуються від ДОВЖИНИ стопи: висота рамки залежить
+  // від того, скільки ноги видно згори, і стрибала б від чобота до чобота.
+  const L = footBB.w * imgScale;              // довжина стопи на екрані
+  const h = L * (H.height ?? 0.30);
+  const w = h * (hintImage.width / hintImage.height);
+
+  const cx = imgX + footBB.cx * imgScale
+           + L * ((H.offsetX ?? -0.08) + (H.shiftX ?? 0.26) * eased);
+  const cy = imgY + (footBB.y1 + 1) * imgScale - L * (H.liftY ?? 0.17);
+
+  ctx.save();
+  ctx.globalAlpha = (H.alpha ?? 0.95) * fade * fadeOut;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+  ctx.shadowBlur = 24;
+  ctx.drawImage(hintImage, cx - w / 2, cy - h / 2, w, h);
+  ctx.restore();
 }
 
 function drawBrush() {
