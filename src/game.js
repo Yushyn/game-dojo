@@ -1267,19 +1267,75 @@ function loadGirl() {
 
   // Вимкнені ролики (on: false) просто не беремо.
   let list = all.filter((c) => c && c.on !== false && c.video);
-  if (!list.length) return;          // усі вимкнені — дівчинки на сцені немає
+  // Усі вимкнені — не лишаємо порожнє місце, а показуємо спрайтшит.
+  // Раніше тут був просто return, і дівчинка зникала з екрана зовсім.
+  if (!list.length) { useGirlSheet(); return; }
 
-  // Якщо лишився один ролик, робимо з нього ДВІ копії й крутимо їх
-  // по черзі. Це не примха: вбудований loop у браузера перемотує
-  // відео по-справжньому й застигає на 136-249 мс — око читає це як
-  // ривок. Дві копії міняються миттєво, бо друга вже розкодована.
-  // Розчинення при цьому майже нульове: ролик стикується сам із
-  // собою кадр-у-кадр, розмазувати нічого не треба.
+  // Якщо ролик один, робимо з нього ДВІ копії й крутимо їх по черзі.
+  // Це не примха: вбудований loop у браузера перемотує відео
+  // по-справжньому й застигає на 136-249 мс — око читає це як ривок.
+  // Дві копії міняються миттєво, бо друга вже розкодована.
   const single = list.length === 1;
   if (single) list = [list[0], list[0]];
   girlCross = single ? 0.06 : Math.max(0.05, G.crossSeconds ?? 0.5);
 
-  let ready = 0, failed = false;
+  let done = 0, finished = false;
+  const bad = [];
+
+  // Кожен ролик відповідає сам за себе. Якщо якогось файлу немає,
+  // викидаємо САМЕ ЙОГО, а решта грає далі. Раніше один відсутній
+  // файл — наприклад місток, який не доїхав у assets, — відправляв
+  // усю дівчинку на запасний спрайтшит або й зовсім прибирав її.
+  function finish() {
+    if (finished) return;
+    finished = true;
+
+    let good = els.filter((e) => !e._bad);
+
+    if (!good.length) {
+      console.warn('Жоден ролик дівчинки не завантажився — беру спрайтшит. ' +
+        'Не знайдено: ' + bad.join(', '));
+      useGirlSheet();
+      return;
+    }
+    if (bad.length) {
+      console.warn('Ролик дівчинки не знайдено: ' + bad.join(', ') +
+        ' — перевір, чи ці файли лежать у папці assets/. ' +
+        'Решта анімації грає далі.');
+    }
+    if (!checkAlpha(good[0])) {
+      console.warn('Браузер не тягне прозорість у webm — беру спрайтшит');
+      useGirlSheet();
+      return;
+    }
+
+    // Лишився один робочий ролик — крутимо його двома копіями,
+    // як і в разі, коли ролик від початку один.
+    if (good.length === 1) { good = [good[0], good[0]]; girlCross = 0.06; }
+
+    girlEls = good;
+    girlCur = 0; girlNext = -1;
+    // Ручка для перевірки в консолі: __girl() покаже, який ролик грає
+    try {
+      window.__girlEls = girlEls;
+      window.__girl = () => ({ cur: girlCur, next: girlNext,
+        els: girlEls.map((e) => ({ src: e.src.split('/').pop(),
+          t: +e.currentTime.toFixed(2), dur: +(e.duration || 0).toFixed(2),
+          paused: e.paused })) });
+    } catch (e) {}
+    // Прогріваємо кожен ролик: даємо йому програти один кадр і ставимо
+    // на паузу. Інакше браузер починає розкодовувати відео лише в мить
+    // переходу, і перші кадри виходять порожні — це й було блимання.
+    girlEls.forEach((e, i) => {
+      if (!i) return;
+      try {
+        e.play().then(() => { try { e.pause(); e.currentTime = 0; } catch (err) {} })
+          .catch(() => {});
+      } catch (err) {}
+    });
+    try { girlEls[0].currentTime = 0; } catch (err) {}
+    girlEls[0].play().catch(() => {});
+  }
 
   const els = list.map((cfg) => {
     const v = document.createElement('video');
@@ -1288,32 +1344,26 @@ function loadGirl() {
     v.playbackRate = G.speed || 1;
     v._cfg = cfg;
     v.addEventListener('error', () => {
-      if (failed) return;
-      failed = true;
-      console.warn('Відео дівчинки не пішло, беру спрайтшит');
-      useGirlSheet();
+      if (v._seen) return;
+      v._seen = true; v._bad = true;
+      bad.push(cfg.video);
+      if (++done >= list.length) finish();
     });
     v.addEventListener('loadeddata', () => {
-      if (++ready < list.length || failed) return;
-      if (!checkAlpha(els[0])) {
-        failed = true;
-        console.warn('Браузер не тягне прозорість у webm — беру спрайтшит');
-        useGirlSheet();
-        return;
-      }
-      girlEls = els;
-      girlCur = 0; girlNext = -1;
-      // Ручка для перевірки в консолі: __girl() покаже, який ролик грає
-      try { window.__girlEls = girlEls; window.__girl = () => ({ cur: girlCur, next: girlNext,
-        els: girlEls.map((e) => ({ src: e.src.split('/').pop(),
-          t: +e.currentTime.toFixed(2), dur: +(e.duration || 0).toFixed(2),
-          paused: e.paused })) }); } catch (e) {}
-      els.forEach((e, i) => { try { e.currentTime = 0; if (i) e.pause(); } catch (err) {} });
-      els[0].play().catch(() => {});
+      if (v._seen) return;
+      v._seen = true;
+      if (++done >= list.length) finish();
     });
     v.src = cfg.video;
     return v;
   });
+
+  // Запобіжник: якщо якийсь ролик не озвався ані успіхом, ані помилкою
+  // (буває на повільному з'єднанні), через 8 секунд запускаємо те, що є.
+  setTimeout(() => {
+    els.forEach((v) => { if (!v._seen) { v._seen = true; v._bad = true; bad.push(v._cfg.video); } });
+    finish();
+  }, 8000);
 }
 
 // Слідкуємо за тим, коли пора починати перехід і коли міняти основний ролик
@@ -1331,7 +1381,7 @@ function girlTick() {
   const cross = girlCross;
   const left = cur.duration - cur.currentTime;
 
-  // пора підключати наступний і починати розчинення
+  // Пора підключати наступний ролик і починати розчинення.
   if (girlNext < 0 && (left <= cross || cur.ended)) {
     girlNext = (girlCur + 1) % girlEls.length;
     const nx = girlEls[girlNext];
@@ -1339,11 +1389,16 @@ function girlTick() {
     nx.play().catch(() => {});
   }
 
-  // поточний догрався — він стає запасним, наступний основним
+  // Міняємо основний ролик ТІЛЬКИ коли наступний реально показує кадр.
+  // Поки він не готовий, тримаємо останній кадр поточного — картинка
+  // застигає на мить, але не зникає.
   if (girlNext >= 0 && (cur.ended || left <= 0.01)) {
-    try { cur.pause(); cur.currentTime = 0; } catch (e) {}
-    girlCur = girlNext;
-    girlNext = -1;
+    const nx = girlEls[girlNext];
+    if (nx.readyState >= 2 && nx.currentTime > 0) {
+      try { cur.pause(); cur.currentTime = 0; } catch (e) {}
+      girlCur = girlNext;
+      girlNext = -1;
+    }
   }
 }
 
@@ -1395,12 +1450,21 @@ function drawGirl(now) {
     girlTick();
     const cur = girlEls[girlCur];
     if (cur && cur.readyState >= 2) {
-      if (girlNext >= 0) {
-        // розчинення: старий згасає, новий проявляється
-        const nx = girlEls[girlNext];
-        const t = Math.max(0, Math.min(1, nx.currentTime / girlCross));
-        drawClip(cur, 1 - t);
-        if (nx.readyState >= 2) drawClip(nx, t);
+      const nx = girlNext >= 0 ? girlEls[girlNext] : null;
+      const nxReady = nx && nx.readyState >= 2 && nx.currentTime > 0;
+      if (nxReady) {
+        // Розчинення рахуємо за ЧАСОМ ПОТОЧНОГО ролика, а не наступного:
+        // так воно не залежить від того, коли браузер спромігся завести відео.
+        const left = Math.max(0, cur.duration - cur.currentTime);
+        const t = cur.ended ? 1 : Math.max(0, Math.min(1, (girlCross - left) / girlCross));
+        // Головне: обидва кадри складаємо на окремому ПРОЗОРОМУ шарі,
+        // а вже готову картинку кладемо на екран непрозорою.
+        // Якщо малювати два напівпрозорі кадри просто на фон, у момент
+        // переходу дівчинка сумарно стає напівпрозорою і ніби блимає.
+        const g = girlLayer();
+        drawClipTo(g, cur, 1);
+        drawClipTo(g, nx, t);
+        ctx.drawImage(girlBuf, 0, 0);
       } else {
         drawClip(cur, 1);
       }
@@ -1422,14 +1486,93 @@ function drawGirl(now) {
                 b.x, b.y, b.w, b.h);
 }
 
-function drawClip(v, alpha) {
+// Колірна підгонка ролика. Ролики зняті в різному світлі, і другий
+// помітно темніший та менш насичений за перший. Замість того щоб
+// перезнімати відео, підправляємо його прямо при малюванні.
+//
+// Числа беруться з `color` того самого кліпа в tuning.js. Рядок
+// збирається один раз і запамʼятовується: збирати його щокадру
+// означало б створювати сміття 60 разів на секунду.
+function filterString(c) {
+  const parts = [];
+  if (c.brightness !== undefined && c.brightness !== 1) parts.push(`brightness(${c.brightness})`);
+  if (c.saturate   !== undefined && c.saturate   !== 1) parts.push(`saturate(${c.saturate})`);
+  if (c.hue        !== undefined && c.hue        !== 0) parts.push(`hue-rotate(${c.hue}deg)`);
+  if (c.contrast   !== undefined && c.contrast   !== 1) parts.push(`contrast(${c.contrast})`);
+  return parts.join(' ');
+}
+
+// prog — де ми всередині ролика, від 0 (початок) до 1 (кінець).
+// Якщо в кліпа є `colorTo`, підгонка ПЛАВНО переходить від `color`
+// до `colorTo`. Це потрібно містках: їхні кадри домальовані з двох
+// різних роликів, тому на початку містка колір як у першого ролика,
+// а в кінці — як у другого. Одне число на весь місток тут не працює:
+// один із двох стиків усе одно давав помітний перепад.
+function clipFilter(cfg, prog) {
+  if (!cfg) return '';
+  const a = cfg.color;
+  const bb = cfg.colorTo;
+  if (!bb) {
+    if (cfg._filter === undefined) cfg._filter = filterString(a || {});
+    return cfg._filter;
+  }
+  const t = Math.max(0, Math.min(1, prog || 0));
+  const A = a || {};
+  const mix = (k, dflt) => {
+    const x = A[k] === undefined ? dflt : A[k];
+    const y = bb[k] === undefined ? dflt : bb[k];
+    return +(x + (y - x) * t).toFixed(4);
+  };
+  return filterString({
+    brightness: mix('brightness', 1),
+    saturate:   mix('saturate', 1),
+    hue:        mix('hue', 0),
+    contrast:   mix('contrast', 1),
+  });
+}
+
+// Не кожен браузер уміє ctx.filter. Перевіряємо один раз: якщо не
+// вміє, просто малюємо без підгонки, а не ламаємо картинку.
+let canFilter = null;
+function filterWorks() {
+  if (canFilter === null) {
+    try {
+      const t = document.createElement('canvas').getContext('2d');
+      t.filter = 'brightness(1.2)';
+      canFilter = t.filter !== 'none' && t.filter !== '';
+    } catch (e) { canFilter = false; }
+  }
+  return canFilter;
+}
+
+// Окреме прозоре полотно, на якому збирається розчинення.
+// Створюється один раз і перестворюється лише якщо змінився розмір гри.
+let girlBuf = null, girlBufCtx = null;
+function girlLayer() {
+  if (!girlBuf || girlBuf.width !== GAME.width || girlBuf.height !== GAME.height) {
+    girlBuf = document.createElement('canvas');
+    girlBuf.width = GAME.width; girlBuf.height = GAME.height;
+    girlBufCtx = girlBuf.getContext('2d');
+  }
+  girlBufCtx.setTransform(1, 0, 0, 1, 0, 0);
+  girlBufCtx.clearRect(0, 0, girlBuf.width, girlBuf.height);
+  return girlBufCtx;
+}
+
+function drawClipTo(g, v, alpha) {
   if (alpha <= 0.004) return;
   const b = girlBox(v._cfg, v.videoWidth / v.videoHeight);
-  if (alpha >= 0.999) { ctx.drawImage(v, b.x, b.y, b.w, b.h); return; }
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(v, b.x, b.y, b.w, b.h);
-  ctx.restore();
+  const prog = v.duration ? v.currentTime / v.duration : 0;
+  const f = filterWorks() ? clipFilter(v._cfg, prog) : '';
+  g.save();
+  if (alpha < 0.999) g.globalAlpha = alpha;
+  if (f) g.filter = f;
+  g.drawImage(v, b.x, b.y, b.w, b.h);
+  g.restore();
+}
+
+function drawClip(v, alpha) {
+  drawClipTo(ctx, v, alpha);
 }
 
 // Тінь від ноги, що падає. Лежить НЕ під ногою, а там, куди нога
