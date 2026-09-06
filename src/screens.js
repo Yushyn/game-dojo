@@ -153,27 +153,33 @@ function buildCreditsLogo() {
   box.appendChild(img);
 }
 
+// ── КОМАНДА НА ЕКРАНІ АВТОРІВ ─────────────────────────────────
+// Замість фотографії тут може крутитись відео. Зациклюється воно
+// так само, як дівчинка в грі: вбудований loop у браузера — це
+// справжнє перемотування з паузою 150–250 мс, і око читає її як
+// ривок. Тому заводимо ДВІ копії ролика й пускаємо їх по черзі:
+// поки одна дограє, друга вже розкодована й проявляється поверх.
+// Якщо відео не відкрилось (старий браузер, немає файла) —
+// на його місце тихо стає звичайна картинка, як було раніше.
+let teamVideos = [];    // [той, що в потоці, той, що поверх]
+let teamCur = 0;        // яка копія зараз основна
+let teamRaf = 0;
+let teamCross = 0.12;   // за скільки секунд одна перетікає в іншу
+
 function buildTeam() {
   const box = $('s-team');
   const P = S.teamPhoto || {};
   if (!box) return;
 
+  stopTeamVideo();
   box.innerHTML = '';
 
   const stage = document.createElement('div');
   stage.className = 'cr-stage';
 
-  const pic = document.createElement('picture');
-  if (P.webp) {
-    const src = document.createElement('source');
-    src.srcset = P.webp; src.type = 'image/webp';
-    pic.appendChild(src);
-  }
-  const img = document.createElement('img');
-  img.src = P.png || P.webp || '';
-  img.alt = S.creditsTitle || 'Credits';
-  pic.appendChild(img);
-  stage.appendChild(pic);
+  const clips = [].concat(P.video || []).filter(Boolean);
+  const measured = clips.length ? buildTeamVideo(stage, P, clips)
+                                : buildTeamPhoto(stage, P);
 
   const names = document.createElement('div');
   names.className = 'cr-names';
@@ -196,14 +202,165 @@ function buildTeam() {
   stage.appendChild(names);
   box.appendChild(stage);
 
+  // Підписи звужуються рівно до ширини картинки чи кадру,
+  // інакше відсотки з tuning.js рахувались би від усього екрана.
   const fit = () => {
-    const w = img.getBoundingClientRect().width;
+    const w = measured.getBoundingClientRect().width;
     if (w) names.style.width = w + 'px';
   };
-  img.addEventListener('load', fit);
-  if (window.ResizeObserver) new ResizeObserver(fit).observe(img);
+  measured.addEventListener('load', fit);
+  measured.addEventListener('loadedmetadata', fit);
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(measured);
   addEventListener('resize', fit);
   fit();
+}
+
+// Звичайне фото — запасний варіант і те, що було раніше.
+function buildTeamPhoto(stage, P) {
+  const pic = document.createElement('picture');
+  if (P.webp) {
+    const src = document.createElement('source');
+    src.srcset = P.webp; src.type = 'image/webp';
+    pic.appendChild(src);
+  }
+  const img = document.createElement('img');
+  img.src = P.png || P.webp || '';
+  img.alt = S.creditsTitle || 'Credits';
+  pic.appendChild(img);
+  stage.appendChild(pic);
+  return img;
+}
+
+// Дві копії одного ролика в одній коробці: перша задає розмір,
+// друга лежить точно поверх неї й чекає своєї черги.
+function buildTeamVideo(stage, P, clips) {
+  teamCross = Math.max(0, P.crossSeconds ?? 0.12);
+
+  const box = document.createElement('div');
+  box.className = 'cr-video';
+
+  const make = (over) => {
+    const v = document.createElement('video');
+    v.muted = true; v.defaultMuted = true;
+    v.playsInline = true;
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    v.preload = 'auto';
+    v.className = over ? 'cr-video-over' : '';
+    clips.forEach((src) => {
+      const s = document.createElement('source');
+      s.src = src;
+      if (/\.mp4$/i.test(src))  s.type = 'video/mp4';
+      if (/\.webm$/i.test(src)) s.type = 'video/webm';
+      v.appendChild(s);
+    });
+    box.appendChild(v);
+    return v;
+  };
+
+  const a = make(false), b = make(true);
+  teamVideos = [a, b];
+  teamCur = 0;
+  a.style.opacity = 1; b.style.opacity = 0;
+  a.style.zIndex = 1;  b.style.zIndex = 2;
+  stage.appendChild(box);
+
+  // Відео не пішло або браузер не зрозумів прозорість —
+  // тихо повертаємось до картинки.
+  const toPhoto = (why) => {
+    if (!box.isConnected) return;
+    console.warn('Відео команди не показуємо (' + why + ') — лишається фото.');
+    stopTeamVideo();
+    box.remove();
+    const img = buildTeamPhoto(stage, P);
+    stage.insertBefore(img.parentNode, stage.firstChild);
+  };
+  a.addEventListener('error', () => toPhoto('файл не відкрився'), { once: true });
+  a.addEventListener('loadeddata', () => {
+    if (P.alphaCheck === false) return;
+    if (!hasAlpha(a)) toPhoto('браузер не тримає прозорість');
+  }, { once: true });
+
+  if (current === 'credits') startTeamVideo();
+  return a;
+}
+
+// Кут кадру зобовʼязаний бути порожнім. Якщо він раптом
+// непрозорий — прозорість не спрацювала, і замість команди
+// був би суцільний прямокутник.
+function hasAlpha(video) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 24; c.height = 24;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.clearRect(0, 0, 24, 24);
+    g.drawImage(video, 0, 0, 24, 24);
+    return g.getImageData(0, 0, 3, 3).data[3] < 200;
+  } catch (e) {
+    return true;   // не змогли перевірити — вважаємо, що все гаразд
+  }
+}
+
+function startTeamVideo() {
+  if (!teamVideos.length) return;
+  const a = teamVideos[teamCur];
+  const p = a.play();
+  if (p && p.catch) p.catch(() => {});
+  if (!teamRaf) teamRaf = requestAnimationFrame(teamTick);
+}
+
+function stopTeamVideo() {
+  if (teamRaf) { cancelAnimationFrame(teamRaf); teamRaf = 0; }
+  teamVideos.forEach((v) => { try { v.pause(); v.currentTime = 0; } catch (e) {} });
+  teamVideos = [];
+}
+
+function pauseTeamVideo() {
+  if (teamRaf) { cancelAnimationFrame(teamRaf); teamRaf = 0; }
+  teamVideos.forEach((v) => { try { v.pause(); } catch (e) {} });
+}
+
+function resumeTeamVideo() {
+  if (!teamVideos.length) return;
+  const a = teamVideos[teamCur];
+  const p = a.play();
+  if (p && p.catch) p.catch(() => {});
+  if (!teamRaf) teamRaf = requestAnimationFrame(teamTick);
+}
+
+// Кожен кадр дивимось, скільки лишилось поточній копії. Коли до
+// кінця менше за час перетікання — заводимо другу й проявляємо її.
+function teamTick() {
+  teamRaf = requestAnimationFrame(teamTick);
+  if (teamVideos.length < 2) return;
+
+  const a = teamVideos[teamCur], b = teamVideos[1 - teamCur];
+  const dur = a.duration;
+  if (!dur || !isFinite(dur)) return;
+
+  const left = dur - a.currentTime;
+
+  if (b.paused && left <= teamCross + 0.08) {
+    try { b.currentTime = 0; } catch (e) {}
+    b.style.zIndex = 2;
+    a.style.zIndex = 1;
+    const p = b.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  if (!b.paused) {
+    const k = teamCross > 0
+      ? Math.min(1, Math.max(0, (teamCross - left) / teamCross))
+      : (left <= 0 ? 1 : 0);
+    b.style.opacity = k;
+  }
+
+  if (a.ended || left <= 0) {
+    a.style.opacity = 0;
+    b.style.opacity = 1;
+    try { a.pause(); a.currentTime = 0; } catch (e) {}
+    teamCur = 1 - teamCur;
+  }
 }
 
 function buildFeet() {
@@ -271,6 +428,8 @@ function paintArt() {
 }
 
 function toggleVideo(name) {
+  if (name === 'credits') resumeTeamVideo(); else pauseTeamVideo();
+
   const vid = $('s-menu-video');
   if (!vid) return;
   if (name === 'menu') {

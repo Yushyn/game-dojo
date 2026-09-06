@@ -661,15 +661,36 @@ export const TUNING = {
     leaderboardTitle: 'Leaderboard',
     creditsTitle:     'Credits',
 
+    // Порядок і числа підігнані під ВІДЕО (assets/credits.webm):
+    // там команда стоїть інакше, ніж на старому фото.
+    // x — центр підпису у відсотках ширини кадру.
     team: [
-      { name: 'Yan Yushyn',          x: 21.6 },
-      { name: 'Anastasiia Boiarska', x: 34.1 },
-      { name: 'Vladyslav Hyryk',     x: 51.2 },
-      { name: 'Anna Khamietova',     x: 69.0 },
-      { name: 'Rodion Baskakov',     x: 82.6 },
+      { name: 'Yan Yushyn',          x: 23.5 },
+      { name: 'Anna Khamietova',     x: 37.5 },
+      { name: 'Rodion Baskakov',     x: 50.0 },
+      { name: 'Vladyslav Hyryk',     x: 63.5 },
+      { name: 'Anastasiia Boiarska', x: 76.5 },
     ],
 
-    teamPhoto: { webp: 'assets/Credits_team.webp', png: 'assets/Credits_team.png' },
+    // ── КОМАНДА: ВІДЕО АБО ФОТО ──────────────────────────────
+    // Якщо в `video` є хоч один файл — на екрані авторів крутиться
+    // ролик, зациклений без ривка (дві копії по черзі, як дівчинка
+    // в грі). Список — це той самий ролик у різних форматах: гра
+    // бере перший, який браузер уміє. Прибери `video` зовсім —
+    // і повернеться звичайне фото з `webp`/`png`.
+    //
+    // Ролик має ПРОЗОРИЙ фон (webm з альфою). Не кожен браузер це
+    // вміє: якщо прозорість не спрацювала, замість команди був би
+    // синій прямокутник, тому гра перевіряє це на ділі — бере
+    // піксель у кутку кадру — і мовчки повертає фото.
+    //   crossSeconds — за скільки секунд одне коло перетікає
+    //                  в наступне. 0 — стик без розчинення.
+    teamPhoto: {
+      video:        ['assets/credits.webm'],
+      crossSeconds: 0.12,
+      webp:         'assets/Credits_team.webp',
+      png:          'assets/Credits_team.png',
+    },
 
     // ── ЛОГОТИП НАД КОМАНДОЮ ─────────────────────────────────
     // Стоїть окремим рядком між заголовком і фото, тому НІКОЛИ

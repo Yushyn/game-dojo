@@ -472,6 +472,23 @@
     object-fit: contain; object-position: bottom;
     filter: drop-shadow(0 10px 30px rgba(0,0,0,.6));
   }
+  /* Відео команди. Дві копії лежать одна на одній: перша тримає
+     розмір коробки, друга накладається зверху й проявляється,
+     коли надходить її черга крутитись (див. screens.js). */
+  .cr-video {
+    position: relative; flex: 1; min-height: 0;
+    display: flex; align-items: flex-end;
+  }
+  .cr-video video {
+    display: block; height: 100%; width: auto; max-width: 100%;
+    object-fit: contain; object-position: bottom;
+    filter: drop-shadow(0 10px 30px rgba(0, 0, 0, .6));
+  }
+  .cr-video video.cr-video-over {
+    position: absolute; inset: 0;
+    height: 100%; width: 100%;
+  }
+
   /* Ширину задає src/screens.js — рівно по картинці. */
   .cr-names {
     position: relative; width: 100%; height: calc(var(--rh) * 1.2);
