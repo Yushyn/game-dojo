@@ -4,7 +4,7 @@
 
 import { TUNING } from './tuning.js';
 import { start, undo, reset, getState, brushOptions, setBrush, setPaused } from './game.js';
-import { topScores, submitScore, initDb, dbReady } from './db.js';
+import { topScores, submitScore, qualifies, initDb, dbReady } from './db.js';
 import { initScreens, showScreen, currentScreen, isMuted, duckMusic, playButtonClickSound } from './screens.js';
 
 // Позначка для сторожа запуску в index.html: код дожив досюди,
@@ -554,18 +554,55 @@ function render(s) {
 
   if (st.phase === 'lost' && !lostShown && currentScreen() === 'game') {
     lostShown = true;
-    showScreen('lost');
+    endRun(false, st.score);
   }
   if (st.phase !== 'lost') lostShown = false;
 
   if (st.phase === 'done' && !resultShown && currentScreen() === 'game') {
     resultShown = true;
-    put('s-result-score', 'textContent', st.score);
-    if (statusEl) statusEl.textContent = '';
-    showScreen('result');
+    endRun(true, st.score);
   }
   if (st.phase !== 'done') resultShown = false;
 }
+
+// ── Чим закінчилась гра ───────────────────────────────────────
+// Місце в таблиці залежить тільки від очок, а не від того, дійшов
+// гравець до кінця чи витратив усі ноги. Тому програш із гарним
+// рахунком веде на той самий екран збереження, що й перемога, —
+// просто з іншим заголовком.
+//
+// Звичайний екран програшу лишається для тих, кому до таблиці не
+// вистачило: пропонувати їм вписати імʼя означало б обіцяти
+// місце, якого немає.
+async function endRun(won, score) {
+  if (!won) {
+    let ok = false;
+    try {
+      const q = await qualifies(score);
+      // unknown — це «база мовчить, ми не знаємо». Для перемоги
+      // поле все одно показуємо, а от переможеному краще не
+      // обіцяти таблицю навмання.
+      ok = q.ok && !q.unknown;
+    } catch (e) {
+      ok = false;
+    }
+    // Гравець міг за цей час вийти в меню або почати нову гру.
+    if (currentScreen() !== 'game') return;
+    if (!ok) { showScreen('lost'); return; }
+  }
+
+  put('s-result-title', 'textContent', won ? t.resultTitle : (t.lostQualifiedTitle || t.lostTitle));
+  put('s-result-label', 'textContent', t.resultScore);
+  put('s-result-score', 'textContent', score);
+  lastRunScore = score;
+  if (statusEl) statusEl.textContent = '';
+  showScreen('result');
+}
+
+// Рахунок саме тієї гри, що скінчилась. Раніше при збереженні
+// бралось поточне значення з рушія — а воно вже могло бути іншим,
+// якщо гравець устиг натиснути «Ще раз».
+let lastRunScore = 0;
 
 function renderTime(st) {
   if (timerEl) {
@@ -644,7 +681,7 @@ saveBtn?.addEventListener('click', async () => {
   if (!name) { statusEl.textContent = t.needName; nameEl?.focus(); return; }
   saveBtn.disabled = true;
   statusEl.textContent = t.saving;
-  const res = await submitScore(name, getState().score);
+  const res = await submitScore(name, lastRunScore);
   saveBtn.disabled = false;
   statusEl.textContent = res.ok ? t.saved : 'Не збереглось: ' + res.reason;
   if (!res.ok) return;

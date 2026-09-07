@@ -746,6 +746,10 @@ export const TUNING = {
     lostAgain: 'Try Again',
     lostMenu:  'Main Menu',
 
+    // Програш, але очок вистачає на таблицю: гравець бачить не
+    // екран програшу, а те саме поле для імені, що й переможець.
+    lostQualifiedTitle: 'Out of Legs, Still on the Board',
+
     resultTitle:     'You cheat and win',
     resultScore:     'Your Score',
     namePlaceholder: 'Your Name',
