@@ -1725,8 +1725,23 @@ export function undo() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ЧІТ-КОД (100% ПЕРЕМОГА В РАУНДІ)
+//  ЧІТ-КОДИ
 // ══════════════════════════════════════════════════════════════
+
+// Перескочити на потрібний раунд. Очки й життя не чіпаємо —
+// це інструмент для показу, а не спосіб виграти.
+// Номери рахуються з нуля, як усередині гри.
+export function gotoRound(i) {
+  if (!boots.length) return false;
+  game.paused = false;
+  beginRound(Math.max(0, Math.min(boots.length - 1, Math.floor(i))));
+  notify();
+  return true;
+}
+
+export function lastRound() { return Math.max(0, boots.length - 1); }
+
+// ── 100% перемога в раунді (набрана назва рівня) ──────────────
 window.__cheatWin = () => {
   game.lastMatch = 100;
   game.lastOutside = 0;

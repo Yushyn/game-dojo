@@ -3,7 +3,8 @@
 // самі, а єдине, що вибирає гравець, це розмір пензля.
 
 import { TUNING } from './tuning.js';
-import { start, undo, reset, getState, brushOptions, setBrush, setPaused } from './game.js';
+import { start, undo, reset, getState, brushOptions, setBrush, setPaused,
+         gotoRound, lastRound } from './game.js';
 import { topScores, submitScore, qualifies, initDb, dbReady } from './db.js';
 import { initScreens, showScreen, currentScreen, isMuted, duckMusic, playButtonClickSound } from './screens.js';
 
@@ -151,25 +152,41 @@ addEventListener('keydown', (e) => {
   const n = Number(e.key);
   if (n >= 1 && n <= brushButtons.length) setBrush(n - 1);
 
-  // ── ЛОГІКА ЧІТ-КОДУ ──────────────────────────────────────────
+  // ── ЛОГІКА ЧІТ-КОДІВ ─────────────────────────────────────────
+  // Буфер один на всі коди — другого слухача клавіш заводити не
+  // треба. Набране копиться тут, а перевірки йдуть по черзі.
   const st = getState();
-  if (st.phase === 'play' && e.key.length === 1) {
-    if (e.key !== ' ') {
-      cheatBuffer += e.key.toLowerCase();
-    }
-
-    const targetName = (st.bootName || '').replace(/\s+/g, '').toLowerCase();
-
-    if (targetName && cheatBuffer.includes(targetName)) {
-      cheatBuffer = '';
-      
-      if (typeof window.__cheatWin === 'function') {
-        window.__cheatWin();
-      }
-    }
+  if (e.key.length === 1 && e.key !== ' ') {
+    cheatBuffer += e.key.toLowerCase();
 
     if (cheatBuffer.length > 50) {
       cheatBuffer = cheatBuffer.slice(-25);
+    }
+
+    // 1. Назва рівня без пробілів — зарахувати раунд на 100%.
+    //    Як і було: тільки в робочий час, коли раунд справді йде.
+    if (st.phase === 'play') {
+      const targetName = (st.bootName || '').replace(/\s+/g, '').toLowerCase();
+
+      if (targetName && cheatBuffer.includes(targetName)) {
+        cheatBuffer = '';
+
+        if (typeof window.__cheatWin === 'function') {
+          window.__cheatWin();
+        }
+        return;
+      }
+    }
+
+    // 2. cinderella — перескочити на останній чобіт.
+    //    Тут фаза не важлива: код спрацює й під час вступу,
+    //    і на екрані результату, аби була відкрита гра.
+    const jump = String(TUNING.texts?.cheats?.lastLevel || '').toLowerCase();
+
+    if (jump && cheatBuffer.includes(jump)) {
+      cheatBuffer = '';
+      gotoRound(lastRound());
+      console.log('Чіт: перехід на останній рівень (' + (lastRound() + 1) + ')');
     }
   }
 });

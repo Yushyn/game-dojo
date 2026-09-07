@@ -750,6 +750,15 @@ export const TUNING = {
     // екран програшу, а те саме поле для імені, що й переможець.
     lostQualifiedTitle: 'Out of Legs, Still on the Board',
 
+    // ── ЧІТ-КОДИ ─────────────────────────────────────────────
+    // Набери слово прямо в грі, без жодного поля вводу.
+    // Назва самого рівня без пробілів уже працює окремо —
+    // вона бере ту саму назву з boots і зараховує 100%.
+    // Тут лише додаткові коди.
+    cheats: {
+      lastLevel: 'cinderella',   // одразу на останній чобіт
+    },
+
     resultTitle:     'You cheat and win',
     resultScore:     'Your Score',
     namePlaceholder: 'Your Name',
