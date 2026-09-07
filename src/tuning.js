@@ -20,7 +20,7 @@ export const TUNING = {
     // true  — спершу просто дивимось, і лише потім починається час на роботу.
     timerStartsAfterPreview: false,
 
-    passPercent:      80,  // з якого відсотка збігу раунд зараховується
+    passPercent:      60,  // з якого відсотка збігу раунд зараховується
 
     // ── ОЧКИ ЗА РАУНД ─────────────────────────────────────────
     // Спершу нараховуємо за влучність, потім знімаємо за те,
@@ -277,7 +277,7 @@ export const TUNING = {
     { src: 'assets/boot10.png', outline: 'assets/boot10-outline.png',
       name: 'sOck',         passPercent: 85, cutOffset: 0 },
     { src: 'assets/boot11.png', outline: 'assets/boot11-outline.png',
-      name: 'Do not Fall',       passPercent: 50, cutOffset: 0, offsetX: -0.16},
+      name: 'Do not Fall',       passPercent: 60, cutOffset: 0, offsetX: -0.16},
     { src: 'assets/boot12.png', outline: 'assets/boot12-outline.png',
       name: 'Leshun',     passPercent: 65, cutOffset: 0, offsetX: -0.15},
     { src: 'assets/boot13.png', outline: 'assets/boot13-outline.png',
@@ -749,6 +749,15 @@ export const TUNING = {
     // Програш, але очок вистачає на таблицю: гравець бачить не
     // екран програшу, а те саме поле для імені, що й переможець.
     lostQualifiedTitle: 'Out of Legs, Still on the Board',
+
+    // ── ЧІТ-КОДИ ─────────────────────────────────────────────
+    // Набери слово прямо в грі, без жодного поля вводу.
+    // Назва самого рівня без пробілів уже працює окремо —
+    // вона бере ту саму назву з boots і зараховує 100%.
+    // Тут лише додаткові коди.
+    cheats: {
+      lastLevel: 'cinderella',   // одразу на останній чобіт
+    },
 
     resultTitle:     'You cheat and win',
     resultScore:     'Your Score',
